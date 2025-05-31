@@ -1,0 +1,65 @@
+#ifndef CLIENT_HPP
+#define CLIENT_HPP
+
+#include <iostream>
+#include <string>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <cstring>
+#include <vector>
+#include <sstream>
+
+class Client {
+private:
+    int sockfd;
+    std::string server;
+    int port;
+    std::string nickname;
+    std::string username;
+    std::string realname;
+    bool connected;
+
+    // Private methods
+    bool createSocket();
+    bool connectToServer();
+    void parseMessage(const std::string& message);
+    std::vector<std::string> split(const std::string& str, char delimiter);
+
+public:
+    // Constructors & Destructor
+    Client(int fd);  // Constructor for server-side client
+    Client(const std::string& server, int port);  // Constructor for client-side connection
+    ~Client();
+
+    // Connection methods
+    bool connect();
+    void disconnect();
+    bool isConnected() const;
+
+    // Authentication methods
+    void setNickname(const std::string& nick);
+    void setUsername(const std::string& user);
+    void setRealname(const std::string& real);
+    void authenticate();
+
+    // Communication methods
+    void sendRaw(const std::string& message);
+    std::string receiveMessage();
+    void processMessages();
+
+    // IRC Commands
+    void join(const std::string& channel);
+    void part(const std::string& channel);
+    void privmsg(const std::string& target, const std::string& message);
+    void quit(const std::string& message = "Goodbye");
+    void pong(const std::string& server);
+
+    // Utility methods
+    void handlePing(const std::string& server);
+    void displayMessage(const std::string& message);
+};
+
+#endif
