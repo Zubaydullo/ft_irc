@@ -1,5 +1,5 @@
-#include "../include/Server.hpp"
-#include "../include/Client.hpp"
+#include "../../include/Server.hpp"
+#include "../../include/Client.hpp"
 
 
 
@@ -133,10 +133,84 @@ void Server::handleClientData(int ClinetFd){
         return;
     }
     buffer[bytesRead] = '\0';
-    std::cout << "Received from client " << ClinetFd << ": " << buffer << std::endl;
+    std::string message(buffer);
+    std::cout << "Received From Clinet " << ClinetFd << ": " << message << std::endl;
+    parseCommand(ClinetFd , message);
 }
 
+// HACK: START  implement the  command  
+
+
+void Server::parseCommand(int  clinetFd, const std::string& message){
+     
+    std::cout << "Parsing command from client " << clinetFd << ":" << std::endl;
+
+    std::istringstream iss(message);
+    std::string command;
+    iss >> command;
+    if(command == "PASS" ){
+         handelPass(clinetFd , iss);
+    }
+    else if(command == "NICK"){ 
+        handelNick(clinetFd, iss);
+    }
+    else if(command == "USER"){
+         handelUser(clinetFd, iss);
+    }else {
+        std::cout << "Unknown  Command :  " << command   << std::endl;    
+    }
+}     
+void Server::handelPass(int clinetFd ,  std::istringstream& iss) {
+           
+    std::string password;
+    iss >> password;
+    std::cout << "Client " << clinetFd << " sent  password " << password << std::endl;
+    if(password == _password){
+            std::cout << "The password correct for clinet  " << clinetFd << std::endl;
+            _Client[clinetFd]->setAuthenticated(true);
+    }else{
+
+        std::cout << "Wrong password from clinet  : "  << clinetFd<< std::endl;
+        //TODO: handell the error after 
+    }
+}
+void Server::sendToClient(int clientFd,const  std::string& message){
+        
+    std::string msg = message + "\r\n";
+    send(clientFd ,msg.c_str(), msg.length(),0 );
+    std::cout <<  "Sent to the Client " << clientFd << " : " << message << std::endl; 
+}
+void Server::handelNick(int clientFd, std::istringstream& iss){ 
+        std::string nickName;
+    iss >> nickName;
+        std::cout << "Clinet  :"  << clientFd << " Wants  nickname:" << nickName << std::endl;
+        
+      _Client[clientFd]->setNickname(nickName);     
  
+}
+
+void Server::handelUser(int clinetFd , std::istringstream& iss){
+     
+     std::string username, hostname , servername, realname;
+     iss  >> username >> hostname >> servername;
+     std::getline(iss, realname);
+
+    std::cout << "ClinedFd" << clinetFd << " user info : " << username << std::endl;
+        
+    _Client[clinetFd]->setUsername(username);
+    _Client[clinetFd]->setRealname(realname);
+    if(_Client[clinetFd]->isAuthenticated() && !_Client[clinetFd]->getNickname().empty()){
+
+        _Client[clinetFd]->setRegistered(true);
+        std::cout << "ClinetFd " << clinetFd << " is now fully registered "  << std::endl;
+        sendToClient(clinetFd , "001 -> " + _Client[clinetFd]->getNickname() + " :Welcome to the IRC Server!" );    
+        sendToClient(clinetFd , "002 -> " + _Client[clinetFd]->getNickname() + " :Your host is localhost" );    
+        sendToClient(clinetFd , "003 -> " + _Client[clinetFd]->getNickname() + " :Server created recently" );    
+    }
+}
+
+
+
 Server::~Server(){
         
         std::cout << "cnx closed" << std::endl;

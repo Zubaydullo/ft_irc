@@ -31,7 +31,12 @@ class Server{
            bool createSocket();
            void acceptNewClient();
            void handleClientData(int ClinetFd);
-           void removeClient(int ClinetFd);
+           void removeClient(int clinetFd);
+           void parseCommand(int clinetFd , const std::string& message);
+           void handelPass(int clinetFd ,  std::istringstream& iss);
+           void handelNick(int clinetFd , std::istringstream& iss);
+           void handelUser(int clinetFd ,  std::istringstream& iss);
+           void sendToClient(int clinetfd ,const  std::string& message);
             
 };
 

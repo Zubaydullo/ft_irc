@@ -1,10 +1,15 @@
-#include "../include/Client.hpp"
+#include "../../include/Client.hpp"
 
 // Constructor for server-side client
 Client::Client(int fd) : sockfd(fd), connected(true) {
     nickname = "";
     username = "";
     realname = "";
+
+    //NOTE: Haithem add them --/
+    authenticated = false;
+    registered = false;
+    //NOTE: Haithem add them ---/
 }
 
 // Constructor for client-side connection
