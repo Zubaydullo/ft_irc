@@ -49,6 +49,8 @@ bool Client::connectToServer() {
     std::memcpy(&server_addr.sin_addr.s_addr, host_entry->h_addr, host_entry->h_length);
 
     // Connect to server
+    // we need to cast the server_addr to a sockaddr*
+    // why? because the connect function expects a sockaddr*
     if (::connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         std::cerr << "Error: Failed to connect to server" << std::endl;
         return false;

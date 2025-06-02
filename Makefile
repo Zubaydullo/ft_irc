@@ -65,40 +65,50 @@ OBJ_DIR = obj
 OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 
 # Create object directories
-$(OBJ_DIR):
-	@mkdir -p $(OBJ_DIR) \
-		$(OBJ_DIR)/server \
-		$(OBJ_DIR)/client \
-		$(OBJ_DIR)/channel \
-		$(OBJ_DIR)/commands/basic \
-		$(OBJ_DIR)/commands/channel \
-		$(OBJ_DIR)/commands/messaging \
-		$(OBJ_DIR)/commands/operator \
-		$(OBJ_DIR)/commands/bonus \
-		$(OBJ_DIR)/utils \
-		$(OBJ_DIR)/message
+$(shell mkdir -p $(OBJ_DIR) \
+    $(OBJ_DIR)/server \
+    $(OBJ_DIR)/client \
+    $(OBJ_DIR)/channel \
+    $(OBJ_DIR)/commands/basic \
+    $(OBJ_DIR)/commands/channel \
+    $(OBJ_DIR)/commands/messaging \
+    $(OBJ_DIR)/commands/operator \
+    $(OBJ_DIR)/commands/bonus \
+    $(OBJ_DIR)/utils \
+    $(OBJ_DIR)/message)
 
 # Main target
-all: $(OBJ_DIR) $(NAME)
+all: $(NAME)
 
 # Linking
 $(NAME): $(OBJ)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	@echo "Linking..."
+	@$(CXX) $(CXXFLAGS) $^ -o $@
+	@echo "Done!"
 
 # Compilation
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@echo "Compiling $<..."
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Clean object files
 clean:
-	rm -rf $(OBJ_DIR)
+	@echo "Cleaning object files..."
+	@rm -rf $(OBJ_DIR)
+	@echo "Done!"
 
 # Clean everything
 fclean: clean
-	rm -f $(NAME)
+	@echo "Cleaning executable..."
+	@rm -f $(NAME)
+	@echo "Done!"
 
 # Rebuild everything
-re: fclean all
+re:
+	@echo "Rebuilding project..."
+	@$(MAKE) fclean
+	@$(MAKE) all
+	@echo "Rebuild complete!"
 
 # Phony targets
 .PHONY: all clean fclean re
