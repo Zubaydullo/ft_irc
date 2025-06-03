@@ -167,6 +167,7 @@ void Server::parseCommand(int  clinetFd, const std::string& message){
         std::cout << "Unknown  Command :  " << command   << std::endl;    
         //TODO: we neeed to handle the  unknown command here later
     }
+    
 }    
 
 
@@ -194,6 +195,8 @@ void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
                  sendToClient(membersFd , ":" + senderNick + " PRIVMSG " + target + " :" + message );
                   }
              }
+         }else{
+              
          }
     }
     //TODO :  We need to add User to User later 
@@ -217,7 +220,7 @@ void Server::handleJoin(int clientFd , std::istringstream& iss){
          std::cout << "Created new channel : " << channelName << std::endl;
     }   
     _channels[channelName]->addMember(clientFd);
-    
+    //TODO  add the user to user 
     std::string nick = _Client[clientFd]->getNickname();
     sendToClient(clientFd , ":" + nick + " JOIN " + channelName);
 
