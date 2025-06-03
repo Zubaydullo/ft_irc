@@ -21,7 +21,10 @@ private:
     std::string username;
     std::string realname;
     bool connected;
-
+    //NOTE: haithem  add modificatin  ------------/
+    bool authenticated; 
+    bool registered;
+    //NOTE: haithem modification end ------/
     // Private methods
     bool createSocket();
     bool connectToServer();
@@ -60,6 +63,14 @@ public:
     // Utility methods
     void handlePing(const std::string& server);
     void displayMessage(const std::string& message);
+    //NOTE: haithem public add On //
+    int getFd() const { return sockfd; }
+    bool isAuthenticated() const { return authenticated; }
+    bool isRegistered() const { return registered; }
+    void setAuthenticated(bool auth) { authenticated = auth; }
+    void setRegistered(bool reg) { registered = reg; }
+    std::string  getNickname() { return nickname;}
+    //NOTE: haithem finish public add on //
 };
 
 #endif

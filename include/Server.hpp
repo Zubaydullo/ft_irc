@@ -9,7 +9,7 @@
 #include <poll.h>
 #include <unistd.h>
 #include "Client.hpp"
-
+#include "Channel.hpp"
 class Server{ 
 
         private: 
@@ -31,8 +31,20 @@ class Server{
            bool createSocket();
            void acceptNewClient();
            void handleClientData(int ClinetFd);
-           void removeClient(int ClinetFd);
-            
+           void removeClient(int clinetFd);
+           void parseCommand(int clinetFd , const std::string& message);
+           void handelPass(int clinetFd ,  std::istringstream& iss);
+           void handelNick(int clinetFd , std::istringstream& iss);
+           void handelUser(int clinetFd ,  std::istringstream& iss);
+           void sendToClient(int clinetfd ,const  std::string& message);
+           //Here handel the existing Users 
+           std::map<std::string , Channel*> _channels;
+
+           // Handel the  Users && Operators 
+           void handleJoin(int clientFd , std::istringstream& iss);
+           void handlePart(int clientFd, std::istringstream& iss);
+           void handlePrivmsg(int clientFd , std::istringstream& iss);
+
 };
 
 
