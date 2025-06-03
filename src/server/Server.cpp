@@ -156,10 +156,92 @@ void Server::parseCommand(int  clinetFd, const std::string& message){
     }
     else if(command == "USER"){
          handelUser(clinetFd, iss);
-    }else {
-        std::cout << "Unknown  Command :  " << command   << std::endl;    
+    }else if(command == "JOIN"){
+         handleJoin(clinetFd , iss);
+    }else if(command == "PART"){
+         handlePart(clinetFd, iss);    
+    }else if(command == "PRIVMSG"){
+         handlePrivmsg(clinetFd , iss);
     }
-}     
+    else {
+        std::cout << "Unknown  Command :  " << command   << std::endl;    
+        //TODO: we neeed to handle the  unknown command here later
+    }
+}    
+
+
+void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
+
+    std::string target , message;
+    int membersFd;
+    iss >> target >> message;
+        
+    std::getline(iss, message);
+
+    if(!message.empty() && message[0] == ' ') message = message.substr(1);
+    if(!message.empty() && message[0] == ':')  message = message.substr(1);
+
+    std::string senderNick = _Client[clinetFd]->getNickname();
+    std::cout << senderNick << " sends  to " << target << " : " << message << std::endl;
+    if(target[0] == '#'){
+         if(_channels.find(target) != _channels.end() ){ 
+             std::vector <int> members = _channels[target]->getMembers();
+             for(std::vector<int>::iterator it  = members.begin() ;  it != members.end() ; ++it){
+                  
+                  membersFd = *it;
+                  if(membersFd != clinetFd){
+                    
+                 sendToClient(membersFd , ":" + senderNick + " PRIVMSG " + target + " :" + message );
+                  }
+             }
+         }
+    }
+    //TODO :  We need to add User to User later 
+}
+void Server::handleJoin(int clientFd , std::istringstream& iss){
+      
+    std::string channelName;
+    iss >> channelName;
+
+    if(!_Client[clientFd]->isRegistered()){
+         
+        sendToClient(clientFd , "451 :You have not registered");
+        return;
+    }
+
+        std::cout << "Client  " << clientFd << " Wants to jion channel: " << channelName << std::endl; 
+    
+        if(_channels.find(channelName) == _channels.end()){  // if both equal to end channel don't exisiting 
+        
+         _channels[channelName] = new Channel(channelName);
+         std::cout << "Created new channel : " << channelName << std::endl;
+    }   
+    _channels[channelName]->addMember(clientFd);
+    
+    std::string nick = _Client[clientFd]->getNickname();
+    sendToClient(clientFd , ":" + nick + " JOIN " + channelName);
+
+    // now we  need to  send the info to the channel 
+    sendToClient(clientFd , "353 " + nick + " = " + channelName + " : " + nick);
+    sendToClient(clientFd , "366 " + nick + " " + channelName + " :End of /NAMES  list");
+}
+
+void Server::handlePart(int clientFd, std::istringstream& iss){
+
+
+    std::string channelName;
+    iss >> channelName;
+
+    if(_channels.find(channelName) != _channels.end()){ 
+        _channels[channelName]->removeMember(clientFd);
+        std::string nick = _Client[clientFd]->getNickname();
+        sendToClient(clientFd , " : " + nick + " PART " + channelName);
+
+        std::cout << "Client " << clientFd << " left channel: " << channelName << std::endl;
+
+    }
+
+}
 void Server::handelPass(int clinetFd ,  std::istringstream& iss) {
            
     std::string password;
