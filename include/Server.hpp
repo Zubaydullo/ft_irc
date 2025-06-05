@@ -1,9 +1,9 @@
-#ifndef SERVER_HPP
+#ifndef  SERVER_HPP
 #define  SERVER_HPP
 #include <iostream>
 #include <string>
 #include <vector>
-#include <map>
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <poll.h>
@@ -19,7 +19,8 @@ class Server{
             std::vector <struct pollfd> _pollfd;
             std::map<int , Client*> _Client;
             bool _running;
-
+            std::map<std::string, std::vector<int> > _inviteList; 
+            std::map<std::string , Channel*> _channels;
         public: 
             Server(int Port , std::string& Password);      
             ~Server();
@@ -36,14 +37,19 @@ class Server{
            void handelPass(int clinetFd ,  std::istringstream& iss);
            void handelNick(int clinetFd , std::istringstream& iss);
            void handelUser(int clinetFd ,  std::istringstream& iss);
-           void sendToClient(int clinetfd ,const  std::string& message);
+           void sendToClient(int clinetfd ,const  std::string& messagei);
+           void handleKick(int clientFd , std::istringstream& iss);
+           void handleMode(int clientFd , std::istringstream& iss);
            //Here handel the existing Users 
-           std::map<std::string , Channel*> _channels;
 
            // Handel the  Users && Operators 
            void handleJoin(int clientFd , std::istringstream& iss);
            void handlePart(int clientFd, std::istringstream& iss);
            void handlePrivmsg(int clientFd , std::istringstream& iss);
+           void handleInvite(int clientFd , std::istringstream& iss);
+           void handleTopic(int clientFd , std::istringstream& iss);
+           int findClientByNick(const std::string& nickname);
+
 
 };
 

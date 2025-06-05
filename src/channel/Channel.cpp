@@ -5,7 +5,8 @@
 
 Channel::Channel(const std::string& name) : _name(name){
         
-    _topic = "";
+     std::cout << "Channel " << _name << " created" << std::endl;
+   _topic = "";
     _password = "";
     _inviteOnly   = false;
     _topicRestricted = true;
@@ -31,13 +32,24 @@ std::vector<int>  Channel::getMembers() const{
 int  Channel::getMemberCount()const {
      return _members.size();
 }
+bool Channel::isInviteOnly()const { 
+    return _inviteOnly;
+}
+
+bool Channel::isTopicRestricted()const {
+     return _topicRestricted;
+}
+
+int Channel::getUserLimit()const {
+     return _userLimit;
+}
+
+std::string Channel::getPassword()const{ 
+    return _password;
+}
 
 void  Channel::setTopic(const std::string& topic){
      _topic = topic;
-}
-
-void Channel::setPassword(const std::string& password){
-     _password = password;
 }
 
 void  Channel::addMember(int ClientFd){
@@ -59,9 +71,54 @@ bool Channel::isMember(int clientFd) const{
         
 }
 
-bool Channel::isOperator(int clientFd)const {
-      return std::find(_operators.begin() , _operators.end() , clientFd) != _operators.end();
+
+// imeplement the operators
+
+bool Channel::isOperator(int clientFd) const
+{
+    for (std::vector<int>::const_iterator it = _operators.begin(); it != _operators.end(); ++it) {
+        if (*it == clientFd) {
+            return true;
+        }
+    }
+    return false;
 }
+
+void Channel::setTopicRestricted(bool mode){ 
+       _topicRestricted = mode;
+
+}
+
+void Channel::setInviteOnly(bool mode){ 
+    _inviteOnly = mode;
+}
+
+void  Channel::setUserLimit(int userLimit){
+    _userLimit = userLimit; 
+}
+
+void Channel::addOperator(int clientFd)
+{
+    if (!isOperator(clientFd)) {
+        _operators.push_back(clientFd);
+    }
+}
+void Channel::setPassword(const std::string& password){
+     _password = password;
+}
+
+
+void Channel::removeOperator(int clientFd)
+{
+    for (std::vector<int>::iterator it = _operators.begin(); it != _operators.end(); ++it) {
+        if (*it == clientFd) {
+            _operators.erase(it);
+            break;
+        }
+    }
+}
+
+
 Channel::~Channel()
 {
     _members.clear();
