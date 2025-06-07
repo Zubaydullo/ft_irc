@@ -76,7 +76,8 @@ void Server::Start(){
     if(!createSocket()){
          throw std::runtime_error("Failed to create server Socket");
     }
-    //TODO: WE  need to add the conf of the i/o non-blocking
+    //TODO: WE  need to add the conf of the i/o non-blockingi
+    // fcntl 
     struct pollfd serverPoll;
     serverPoll.fd = _serverSocket;
     serverPoll.events = POLLIN;
@@ -113,21 +114,47 @@ void Server::Start(){
 void Server::removeClient(int ClinetFd){
     
     std::cout << "Revmoving client" << ClinetFd<<  std::endl;
-    close(ClinetFd);
-    delete _Client[ClinetFd];
-    for(size_t i = 0 ; i < _pollfd.size() ; i++){
          
-        if(_pollfd[i].fd == ClinetFd){
-            _pollfd.erase(_pollfd.begin() + i);
+    for(std::map<std::string , Channel*>::iterator channelIt = _channels.begin();
+            channelIt != _channels.end(); ++channelIt) {
+           
+        if(channelIt->second->isMember(ClinetFd)){
+            std::string nick  = _Client[ClinetFd]->getNickname();
+            std::string channelName = channelIt->first;
+
+        std::vector<int> members = channelIt->second->getMembers();
+        for(std::vector<int>::iterator  it = members.begin() ; it != members.begin(); ++it){
+             if(*it != ClinetFd){
+                 sendToClient(*it,":" + nick + " QUIT :Client disconnected");
+             }
+            channelIt->second->removeOperator(ClinetFd); 
+            channelIt->second->removeMember(ClinetFd);
+        }
+        }
+    }
+    std::map<std::string, Channel*>::iterator it = _channels.begin(); 
+        while(it != _channels.end()){ 
+            if(it->second->getMemberCount() == 0){
+                 delete it->second;
+                 _channels.erase(it++);
+            }else{
+                 ++it;
+            }
+        }
+
+    for(std::vector<struct pollfd>::iterator pollIt = _pollfd.begin(); pollIt != _pollfd.end(); ++pollIt ){
+        if(pollIt->fd == ClinetFd){
+            _pollfd.erase(pollIt);
             break;
         }
+
     }
 }
 void Server::handleClientData(int ClinetFd){
 
     char buffer[1024];
     int bytesRead = recv(ClinetFd,buffer , sizeof(buffer) - 1 , 0);
-    if(bytesRead < 0){
+    if(bytesRead <= 0){
          
         removeClient(ClinetFd);
         return;
@@ -156,26 +183,273 @@ void Server::parseCommand(int  clinetFd, const std::string& message){
     }
     else if(command == "USER"){
          handelUser(clinetFd, iss);
-    }else if(command == "JOIN"){
+    }else if(command == "JOIN"){ 
          handleJoin(clinetFd , iss);
     }else if(command == "PART"){
          handlePart(clinetFd, iss);    
     }else if(command == "PRIVMSG"){
          handlePrivmsg(clinetFd , iss);
-    }
-    else {
+    }else if(command == "KICK"){
+         handleKick(clinetFd , iss); 
+    }else if(command == "MODE"){
+        //TODO: implement the mode 
+         handleMode(clinetFd , iss);
+    }else if(command == "INVITE"){
+         handleInvite(clinetFd , iss);
+    }else if(command == "TOPIC"){
+         handleTopic(clinetFd , iss);
+    }else {
         std::cout << "Unknown  Command :  " << command   << std::endl;    
         //TODO: we neeed to handle the  unknown command here later
     }
     
 }    
 
+int Server::findClientByNick(const std::string& nickname){
+     
+    for(std::map<int , Client*>::iterator it = _Client.begin() ; it != _Client.end(); ++it  ){
+            
+    if(it->second->getNickname() == nickname) return it->first;
+    }
+    return (-1);
+}
+void Server::handleInvite(int clientFd , std::istringstream& iss){
+     std::string targetNick , channelName;
+     iss >> targetNick >> channelName;
+     
+     if(targetNick.empty() || channelName.empty()){ 
+               sendToClient(clientFd, "461 " + _Client[clientFd]->getNickname() + " INVITE :Not enough parameters");       
+         return;
+     }
+     if(_channels.find(channelName) == _channels.end()){
+             sendToClient(clientFd, "403 " + _Client[clientFd]->getNickname() + " " + channelName + " :No such channel");
+         return ;
+     }
+     if(!_channels[channelName]->isMember(clientFd)){
+            sendToClient(clientFd, "442 " + _Client[clientFd]->getNickname() + " " + channelName + " :You're not on that channel"); 
+         return;
+     }
+     if(_channels[channelName]->isInviteOnly() && !_channels[channelName]->isOperator(clientFd)){
+              sendToClient(clientFd, "482 " + _Client[clientFd]->getNickname() + " " + channelName + " :You're not channel operator");
+         return;
+     }
+    int targetFd = findClientByNick(targetNick);
+    if(targetFd == -1){ 
+         sendToClient(clientFd, "401 " + _Client[clientFd]->getNickname() + " " + targetNick + " :No such nick");
+        return;
+    }
+    if(_channels[channelName]->isMember(targetFd)){
+          sendToClient(clientFd, "443 " + _Client[clientFd]->getNickname() + " " + targetNick + " " + channelName + " :is already on channel");
+        return;
+    }
+    _inviteList[channelName].push_back(targetFd);
 
+    std::string inviterNick = _Client[clientFd]->getNickname();
+    sendToClient(targetFd, ":" + inviterNick + " INVITE " + targetNick + " " + channelName);
+    sendToClient(clientFd, "341 " + inviterNick + " " + targetNick + " " + channelName);
+ std::cout << inviterNick << " invited " << targetNick << " to " + channelName << std::endl;
+    
+}
+void  Server::handleMode(int clientFd , std::istringstream& iss){
+    std::string target, modeString,param;
+    iss >> target >> modeString >> param;
+
+    if(target[0] != '#'){
+         sendToClient(clientFd , "501 " + _Client[clientFd]->getNickname() + " :Unknown MODE flag ");
+         return ;
+    }
+    if(_channels.find(target) == _channels.end()){
+         sendToClient(clientFd , "403 " + _Client[clientFd]->getNickname() + " " + target + " :No such channel ");
+         return;
+    }
+    if(!_channels[target]->isOperator(clientFd)){ 
+        sendToClient(clientFd ,"482 " + _Client[clientFd]->getNickname() + " " + target + " :You're not channel operator" );
+        return;
+    }
+        std::string nick = _Client[clientFd]->getNickname();
+      
+             std::vector<int> members = _channels[target]->getMembers();
+   if(modeString == "+o"){
+         int targetFd = findClientByNick(param);
+         if(targetFd == -1){
+              sendToClient(clientFd, "401 " + nick + " " + param + " :No such nick");
+              return ;
+         }
+
+         if(!_channels[target]->isMember(targetFd)){
+             sendToClient(clientFd , "441 " + nick + " " + param + " " + target + " :They aren't on that channel"); 
+            return;
+         }
+         _channels[target]->addOperator(targetFd);
+         for(std::vector<int>::iterator it = members.begin(); it != members.end(); ++it){
+            sendToClient(*it, ":" + nick + " MODE " + target + " +o " + param);   
+         }
+         std::cout << nick << " gave operator status to " << param << " in " << target << std::endl;
+    }else if(modeString == "-o"){
+         int targetFd = findClientByNick(param);
+               if(targetFd == -1){
+                    
+              sendToClient(clientFd, "401 " + nick + " " + param + " :No such nick");
+                    return ;
+               }
+
+        _channels[target]->removeOperator(clientFd);
+         std::vector<int> members = _channels[target]->getMembers();
+        for (std::vector<int>::iterator it = members.begin() ; it != members.end() ; ++it){ 
+            sendToClient(*it, ":" + nick + " MODE " + target + " -o " + param);
+        }
+  std::cout << nick << " removed operator status from " << param << " in " << target << std::endl;
+    }else if (modeString == "+i") {
+        _channels[target]->setInviteOnly(true);
+        for (std::vector<int>::iterator it = members.begin(); it != members.end(); ++it) {
+            sendToClient(*it, ":" + nick + " MODE " + target + " +i");
+        }
+    }else if (modeString == "-i") {
+        _channels[target]->setInviteOnly(false);
+        for (std::vector<int>::iterator it = members.begin(); it != members.end(); ++it) {
+            sendToClient(*it, ":" + nick + " MODE " + target + " -i");
+        }
+    }else if (modeString == "+t") {
+        _channels[target]->setTopicRestricted(true);
+        for (std::vector<int>::iterator it = members.begin(); it != members.end(); ++it) {
+            sendToClient(*it, ":" + nick + " MODE " + target + " +t");
+        }
+    }else if (modeString == "-t") {
+        _channels[target]->setTopicRestricted(false);
+        for (std::vector<int>::iterator it = members.begin(); it != members.end(); ++it) {
+            sendToClient(*it, ":" + nick + " MODE " + target + " -t");
+        }
+    }else if (modeString == "+k") {
+        if (param.empty()) {
+            sendToClient(clientFd, "461 " + nick + " MODE :Not enough parameters");
+            return;
+        }
+        _channels[target]->setPassword(param);
+        for (std::vector<int>::iterator it = members.begin(); it != members.end(); ++it) {
+            sendToClient(*it, ":" + nick + " MODE " + target + " +k " + param);
+        }
+    }else if (modeString == "-k") {
+        _channels[target]->setPassword("");
+        for (std::vector<int>::iterator it = members.begin(); it != members.end(); ++it) {
+            sendToClient(*it, ":" + nick + " MODE " + target + " -k");
+        }
+    }else if (modeString == "+l") {
+        if (param.empty()) {
+            sendToClient(clientFd, "461 " + nick + " MODE :Not enough parameters");
+            return;
+        }
+        int limit = atoi(param.c_str());
+        if (limit <= 0) {
+            sendToClient(clientFd, "472 " + nick + " " + param + " :Invalid limit");
+            return;
+        }
+        _channels[target]->setUserLimit(limit);
+        for (std::vector<int>::iterator it = members.begin(); it != members.end(); ++it) {
+            sendToClient(*it, ":" + nick + " MODE " + target + " +l " + param);
+        }
+    }else if (modeString == "-l") {
+        _channels[target]->setUserLimit(0);
+        for (std::vector<int>::iterator it = members.begin(); it != members.end(); ++it) {
+            sendToClient(*it, ":" + nick + " MODE " + target + " -l");
+        }
+    }else {
+        sendToClient(clientFd, "472 " + nick + " " + modeString + " :Unknown mode char to me");
+    }
+}
+void Server::handleKick(int clientFd , std::istringstream& iss){ 
+    std::string channelName, targetNick, reason;
+    iss >> channelName >> targetNick;
+    std::getline(iss, reason);
+
+    if (!reason.empty() && reason[0] == ' ') reason = reason.substr(1);
+    if (!reason.empty() && reason[0] == ':') reason = reason.substr(1);
+    if (reason.empty()) reason = "No reason given";
+
+    if(_channels.find(channelName) == _channels.end()){
+         sendToClient(clientFd , "403 " + _Client[clientFd]->getNickname()  + 
+                 channelName + ":No such channel ");
+        return;
+    }
+    if(!_channels[channelName]->isMember(clientFd))
+        {
+             sendToClient(clientFd,"442 " + _Client[clientFd]->getNickname() + " " + channelName + "You're not that  channel " );
+            return;
+        }
+     if(!_channels[channelName]->isOperator(clientFd)){ 
+           sendToClient(clientFd, "482 " + _Client[clientFd]->getNickname() + channelName + "You are not the channel operator");
+        return;
+     } 
+     int targetFd = -1;
+    for (std::map<int, Client*>::iterator it = _Client.begin(); it != _Client.end(); ++it) {
+        if (it->second->getNickname() == targetNick) {
+            targetFd = it->first;
+            break;
+        }
+    }
+    if(targetFd == -1 ){ 
+        sendToClient(clientFd , "441 " + _Client[clientFd]->getNickname() 
+                + " " + targetNick + " " + channelName + "The aren't on the that channel" );
+    }
+    std::string kickerNick = _Client[clientFd]->getNickname(); 
+    std::vector<int> members = _channels[channelName]->getMembers();
+    for(std::vector<int>::iterator it = members.begin() ; it != members.end() ; ++it){
+         sendToClient(*it, ":" + kickerNick + " KICK " + channelName + " " + targetNick + " :" + reason);
+    }
+    _channels[channelName]->removeMember(targetFd);
+    std::cout <<kickerNick  <<   " kicked" << targetNick << "from " << channelName  << " ( " << reason << ")" <<  std::endl;
+}
+void Server::handleTopic(int clientFd , std::istringstream& iss){
+   std::string channelName, topic;
+    iss >> channelName;
+    std::getline(iss,topic);
+    
+    std::cout << "DEBUG: The value of topic is " << topic << std::endl; 
+    if (!topic.empty() && topic[0] == ' ') topic = topic.substr(1);
+    if (!topic.empty() && topic[0] == ':') topic = topic.substr(1);
+      
+    std::cout << "DEBUG: The value of topic is after feltring : " << topic << std::endl; 
+    
+    if (_channels.find(channelName) == _channels.end()) {
+        sendToClient(clientFd, "403 " + _Client[clientFd]->getNickname() + " " + channelName + " :No such channel");
+        return;
+    }
+    
+    if (!_channels[channelName]->isMember(clientFd)) {
+        sendToClient(clientFd, "442 " + _Client[clientFd]->getNickname() + " " + channelName + " :You're not on that channel");
+        return;
+    }
+    std::string nick = _Client[clientFd]->getNickname();
+    std::cout << "DEBUG : This the length of the topic :  " << topic.length() << std::endl;
+    std::cout << "DEBUD : this t the empby value " << (topic.empty() ? true : false) << std::endl;
+    if(topic.length() <= 1){
+        std::string currentTopic = _channels[channelName]->getTopic();
+        if (currentTopic.empty()) {
+            sendToClient(clientFd, "331 " + nick + " " + channelName + " :No topic is set");
+        } else {
+            sendToClient(clientFd, "332 " + nick + " " + channelName + " :" + currentTopic);
+        }
+    }else {
+        if(_channels[channelName]->isTopicRestricted() && !_channels[channelName]->isOperator(clientFd)){
+               sendToClient(clientFd, "482 " + nick + " " + channelName + " :You're not channel operator");
+            return;
+        } 
+        std::cout << "enter here to check  after change the topic " << std::endl;
+        
+      _channels[channelName]->setTopic(topic);
+      
+      std::vector<int> members = _channels[channelName]->getMembers();
+        for (std::vector<int>::iterator it = members.begin(); it != members.end(); ++it) {
+            sendToClient(*it, ":" + nick + " TOPIC " + channelName + " :" + topic);
+        }
+        
+        std::cout << nick << " changed topic of " << channelName << " to: " << topic << std::endl;
+    
+    }
+}
 void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
 
     std::string target , message;
-    int membersFd;
-    iss >> target >> message;
+    iss >> target;
         
     std::getline(iss, message);
 
@@ -189,22 +463,32 @@ void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
              std::vector <int> members = _channels[target]->getMembers();
              for(std::vector<int>::iterator it  = members.begin() ;  it != members.end() ; ++it){
                   
-                  membersFd = *it;
+                   int membersFd = *it;
                   if(membersFd != clinetFd){
                     
                  sendToClient(membersFd , ":" + senderNick + " PRIVMSG " + target + " :" + message );
                   }
              }
-         }else{
-              
          }
-    }
-    //TODO :  We need to add User to User later 
+      }else{
+                for(std::map<int , Client*>::iterator it = _Client.begin() ; it != _Client.end() ; ++it){
+                     
+                    if(it->second->getNickname() == target){
+                         sendToClient(it->first , ":" + senderNick + " PRIVMSG "+ target + " : " + message );
+                         std::cout << "Private message send from " << senderNick << " to " << target << std::endl;
+                         return ;
+                    }
+
+                }
+
+                sendToClient(clinetFd , "401 " + senderNick  + " " + target + " No: such nick/channel");
+         }
+    
 }
 void Server::handleJoin(int clientFd , std::istringstream& iss){
       
-    std::string channelName;
-    iss >> channelName;
+    std::string channelName,password;
+    iss >> channelName >> password;
 
     if(!_Client[clientFd]->isRegistered()){
          
@@ -218,12 +502,54 @@ void Server::handleJoin(int clientFd , std::istringstream& iss){
         
          _channels[channelName] = new Channel(channelName);
          std::cout << "Created new channel : " << channelName << std::endl;
-    }   
-    _channels[channelName]->addMember(clientFd);
-    //TODO  add the user to user 
-    std::string nick = _Client[clientFd]->getNickname();
-    sendToClient(clientFd , ":" + nick + " JOIN " + channelName);
+    }
+        Channel * channel= _channels[channelName];
 
+    if(channel->isMember(clientFd)){
+          sendToClient(clientFd, "443 " + _Client[clientFd]->getNickname() + " " + channelName + " :is already on channel");
+        return;
+    }
+    if(channel->isInviteOnly()){
+        bool isInvited = false;
+        std::vector<int>& invites = _inviteList[channelName];
+        for(std::vector<int>::iterator it = invites.begin() ; it != invites.end(); ++it){
+            if(*it == clientFd){ 
+                isInvited = true;
+                invites.erase(it);
+                break;
+            }
+        }
+        if(!isInvited){
+         sendToClient(clientFd, "473 " + _Client[clientFd]->getNickname() + " " + channelName + " :Cannot join channel (+i)");
+        return;    
+        }
+    }
+    if(!channel->getPassword().empty() && password != channel->getPassword()){
+            sendToClient(clientFd, "475 " + _Client[clientFd]->getNickname() + " " + channelName + " :Cannot join channel (+k)");
+        return; 
+    }
+    if(channel->getUserLimit() > 0 && channel->getMemberCount() >= channel->getUserLimit()){
+         sendToClient(clientFd, "471 " + _Client[clientFd]->getNickname() + " " + channelName + " :Cannot join channel (+l)");
+        return;
+    }
+
+        // after passs all the checkes
+    
+      bool isFirstMember = (_channels[channelName]->getMemberCount() == 0);
+    _channels[channelName]->addMember(clientFd);
+     if(isFirstMember){
+         _channels[channelName]->addOperator(clientFd);
+          std::cout << "Client " << clientFd << " is now operator of " << channelName << std::endl;
+    }
+    std::string nick = _Client[clientFd]->getNickname();
+    std::vector<int> members = _channels[channelName]->getMembers();
+    for(std::vector<int>::iterator it = members.begin() ; it != members.end() ; ++it){
+
+        if(*it != clientFd) sendToClient(*it , ":" + nick +  " JOIN " + channelName);
+         
+    }
+    sendToClient(clientFd , ":" + nick + " JOIN " + channelName);
+    
     // now we  need to  send the info to the channel 
     sendToClient(clientFd , "353 " + nick + " = " + channelName + " : " + nick);
     sendToClient(clientFd , "366 " + nick + " " + channelName + " :End of /NAMES  list");
@@ -236,14 +562,23 @@ void Server::handlePart(int clientFd, std::istringstream& iss){
     iss >> channelName;
 
     if(_channels.find(channelName) != _channels.end()){ 
-        _channels[channelName]->removeMember(clientFd);
+     
         std::string nick = _Client[clientFd]->getNickname();
-        sendToClient(clientFd , " : " + nick + " PART " + channelName);
-
+        
+        std::vector<int> members = _channels[channelName]->getMembers();
+        for(std::vector<int>::iterator  it = members.begin() ; it != members.end(); ++ it){ 
+            sendToClient(*it , " : " + nick + " PART " + channelName);
+            
+        }
+        _channels[channelName]->removeMember(clientFd);
         std::cout << "Client " << clientFd << " left channel: " << channelName << std::endl;
 
+        if(_channels[channelName]->getMemberCount() == 0){
+             delete _channels[channelName];
+             _channels.erase(channelName);
+             std::cout << "Deleted empty channel:  " << channelName << std::endl;
+        }
     }
-
 }
 void Server::handelPass(int clinetFd ,  std::istringstream& iss) {
            
