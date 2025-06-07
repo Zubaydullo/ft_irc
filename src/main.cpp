@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
 
         // Create and start server
         Server server(port, password);
-        server.Start();
+        server.start();
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

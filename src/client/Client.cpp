@@ -1,63 +1,54 @@
 #include "../../include/Client.hpp"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <iostream>
+#include <sstream>
+#include <cstring>
 
 // Constructor for server-side client
-Client::Client(int fd) : sockfd(fd), connected(true) {
-    nickname = "";
-    username = "";
-    realname = "";
-
-    //NOTE: Haithem add them --/
-    authenticated = false;
-    registered = false;
-    //NOTE: Haithem add them ---/
+Client::Client(int fd) 
+    : _fd(fd), _port(0), _authenticated(false), _registered(false), _lastActivity(std::time(nullptr)) {
+    _hostname = "localhost";
+    _servername = "42IRC";
+    _pingSent = false;
+    _pingTime = 0;
 }
 
 // Constructor for client-side connection
 Client::Client(const std::string& server, int port) 
-    : server(server), port(port), connected(false) {
-    nickname = "";
-    username = "";
-    realname = "";
+    : _fd(-1), _server(server), _port(port), _authenticated(false), _registered(false), _lastActivity(std::time(nullptr)) {
+    _hostname = "localhost";
+    _servername = "42IRC";
     createSocket();
+    _pingSent = false;
+    _pingTime = 0;
 }
 
 Client::~Client() {
-    if (connected) {
         disconnect();
-    }
 }
 
 bool Client::createSocket() {
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        std::cerr << "Error: Failed to create socket" << std::endl;
+    _fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (_fd < 0) {
+        handleError("Failed to create socket");
         return false;
     }
     return true;
 }
 
-bool Client::connectToServer() {
-    struct sockaddr_in server_addr;
-    struct hostent* host_entry;
+bool Client::connectToServer(const std::string& host, int port) {
+    struct sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(port);
+    serverAddr.sin_addr.s_addr = inet_addr(host.c_str());
 
-    // Get host by name
-    host_entry = gethostbyname(server.c_str());
-    if (!host_entry) {
-        std::cerr << "Error: Failed to resolve hostname" << std::endl;
-        return false;
-    }
-
-    // Setup server address structure
-    std::memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    std::memcpy(&server_addr.sin_addr.s_addr, host_entry->h_addr, host_entry->h_length);
-
-    // Connect to server
-    // we need to cast the server_addr to a sockaddr*
-    // why? because the connect function expects a sockaddr*
-    if (::connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        std::cerr << "Error: Failed to connect to server" << std::endl;
+    if (::connect(_fd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
+        handleError("Failed to connect to server");
         return false;
     }
 
@@ -69,154 +60,307 @@ bool Client::connect() {
         return false;
     }
 
-    if (!connectToServer()) {
-        close(sockfd);
+    if (!connectToServer(_server, _port)) {
+        close(_fd);
+        _fd = -1;
         return false;
     }
 
-    connected = true;
-    std::cout << "Connected to " << server << ":" << port << std::endl;
+    _authenticated = true;
+    _registered = true;
+    updateActivity();
     return true;
 }
 
 void Client::disconnect() {
-    if (connected) {
+    if (_fd != -1) {
         quit("Client disconnecting");
-        close(sockfd);
-        connected = false;
-        std::cout << "Disconnected from server" << std::endl;
+        close(_fd);
+        _fd = -1;
+        handleStateChange("Disconnected");
     }
 }
 
 bool Client::isConnected() const {
-    return connected;
+    return _fd != -1;
 }
 
-void Client::setNickname(const std::string& nick) {
-    nickname = nick;
+void Client::updateActivity() {
+    _lastActivity = std::time(nullptr);
 }
 
-void Client::setUsername(const std::string& user) {
-    username = user;
-}
-
-void Client::setRealname(const std::string& real) {
-    realname = real;
-}
-
-void Client::authenticate() {
-    sendRaw("NICK " + nickname);
-    sendRaw("USER " + username + " 0 * :" + realname);
-}
-
-void Client::sendRaw(const std::string& message) {
-    if (!connected) {
-        std::cerr << "Error: Not connected to server" << std::endl;
-        return;
+bool Client::sendRaw(const std::string& message) {
+    if (_fd == -1) {
+        return false;
     }
 
     std::string msg = message + "\r\n";
-    ssize_t sent = send(sockfd, msg.c_str(), msg.length(), 0);
-    
-    if (sent < 0) {
-        std::cerr << "Error: Failed to send message" << std::endl;
-    } else {
-        std::cout << ">> " << message << std::endl;
+    if (send(_fd, msg.c_str(), msg.length(), 0) == -1) {
+        handleError("Failed to send message");
+        return false;
     }
+
+    return true;
 }
 
-std::string Client::receiveMessage() {
-    if (!connected) {
-        return "";
+bool Client::sendMessage(const std::string& target, const std::string& message) {
+    if (!isRegistered()) {
+        handleError("Not registered");
+        return false;
     }
 
-    char buffer[4096];
-    ssize_t received = recv(sockfd, buffer, sizeof(buffer) - 1, 0);
-    
-    if (received <= 0) {
-        if (received == 0) {
-            std::cout << "Server closed connection" << std::endl;
-        } else {
-            std::cerr << "Error receiving message" << std::endl;
+    return sendRaw("PRIVMSG " + target + " :" + message);
+}
+
+bool Client::sendNotice(const std::string& target, const std::string& message) {
+    if (!isRegistered()) {
+        handleError("Not registered");
+        return false;
+    }
+
+    return sendRaw("NOTICE " + target + " :" + message);
+}
+
+bool Client::joinChannel(const std::string& channel) {
+    if (!isRegistered()) {
+        handleError("Not registered");
+        return false;
+    }
+
+    if (!validateChannelName(channel)) {
+        handleError("Invalid channel name");
+        return false;
+    }
+
+    if (sendRaw("JOIN " + channel)) {
+        _channels.insert(channel);
+        return true;
+    }
+
+    return false;
+}
+
+bool Client::partChannel(const std::string& channel) {
+    if (!isRegistered()) {
+        handleError("Not registered");
+        return false;
+    }
+
+    if (!validateChannelName(channel)) {
+        handleError("Invalid channel name");
+        return false;
+    }
+
+    if (sendRaw("PART " + channel)) {
+        _channels.erase(channel);
+        return true;
+    }
+
+    return false;
+}
+
+bool Client::setNickname(const std::string& nickname) {
+    if (!validateNickname(nickname)) {
+        handleError("Invalid nickname");
+        return false;
+    }
+
+    if (sendRaw("NICK " + nickname)) {
+        _nickname = nickname;
+        updateActivity();
+        return true;
+    }
+
+    return false;
+}
+
+bool Client::setUsername(const std::string& username) {
+    if (username.empty() || username.length() > 12) {
+        handleError("Invalid username");
+        return false;
+    }
+
+    _username = username;
+    updateActivity();
+    return true;
+}
+
+bool Client::setRealname(const std::string& realname) {
+    _realname = realname;
+    updateActivity();
+    return true;
+    }
+
+bool Client::setHostname(const std::string& hostname) {
+    _hostname = hostname;
+    updateActivity();
+    return true;
+}
+
+bool Client::setServername(const std::string& servername) {
+    _servername = servername;
+    updateActivity();
+    return true;
+}
+
+bool Client::setChannelMode(const std::string& channel, const std::string& mode) {
+    if (!isRegistered()) {
+        handleError("Not registered");
+        return false;
+    }
+
+    return sendRaw("MODE " + channel + " " + mode);
+}
+
+bool Client::setTopic(const std::string& channel, const std::string& topic) {
+    if (!isRegistered()) {
+        handleError("Not registered");
+        return false;
+    }
+
+    return sendRaw("TOPIC " + channel + " :" + topic);
         }
-        connected = false;
-        return "";
+
+bool Client::kickUser(const std::string& channel, const std::string& nickname, const std::string& reason) {
+    if (!isRegistered()) {
+        handleError("Not registered");
+        return false;
     }
 
-    buffer[received] = '\0';
-    return std::string(buffer);
+    return sendRaw("KICK " + channel + " " + nickname + " :" + reason);
 }
 
-void Client::processMessages() {
-    std::string buffer = receiveMessage();
-    if (buffer.empty()) {
-        return;
+bool Client::inviteUser(const std::string& channel, const std::string& nickname) {
+    if (!isRegistered()) {
+        handleError("Not registered");
+        return false;
     }
 
-    // Split messages by \r\n
-    std::istringstream iss(buffer);
-    std::string line;
-    
-    while (std::getline(iss, line)) {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
+    return sendRaw("INVITE " + nickname + " " + channel);
         }
-        
-        if (!line.empty()) {
-            parseMessage(line);
+
+bool Client::quit(const std::string& reason) {
+    if (sendRaw("QUIT :" + reason)) {
+        disconnect();
+        return true;
+    }
+
+    return false;
+}
+
+bool Client::ping(const std::string& server) {
+    return sendRaw("PING " + server);
+}
+
+bool Client::pong(const std::string& server) {
+    return sendRaw("PONG " + server);
+}
+
+bool Client::who(const std::string& target) {
+    if (!isRegistered()) {
+        handleError("Not registered");
+        return false;
+    }
+
+    return sendRaw("WHO " + target);
+}
+
+bool Client::list(const std::string& channel) {
+    if (!isRegistered()) {
+        handleError("Not registered");
+        return false;
+    }
+    
+    return sendRaw("LIST " + channel);
+}
+
+bool Client::validateNickname(const std::string& nickname) {
+    if (nickname.empty() || nickname.length() > 9) {
+        return false;
+    }
+
+    for (size_t i = 0; i < nickname.length(); ++i) {
+        char c = nickname[i];
+        if (!isalnum(c) && c != '-' && c != '_' && c != '[' && c != ']' && 
+            c != '\\' && c != '`' && c != '^' && c != '{' && c != '}') {
+            return false;
+}
+    }
+
+    return true;
+}
+
+bool Client::validateChannelName(const std::string& channel) {
+    if (channel.empty() || channel.length() > 50) {
+        return false;
+    }
+
+    if (channel[0] != '#' && channel[0] != '&') {
+        return false;
+    }
+
+    for (size_t i = 1; i < channel.length(); i++) {
+        if (channel[i] == ' ' || channel[i] == ',' || channel[i] == 7) {
+            return false;
         }
     }
+
+    return true;
 }
 
-void Client::parseMessage(const std::string& message) {
-    displayMessage(message);
-    
-    // Handle PING messages
-    if (message.substr(0, 4) == "PING") {
-        size_t pos = message.find(':');
-        if (pos != std::string::npos) {
-            std::string server_name = message.substr(pos + 1);
-            pong(server_name);
-        }
-    }
+void Client::handleError(const std::string& error) {
+    std::cerr << "Client Error: " << error << std::endl;
 }
 
-std::vector<std::string> Client::split(const std::string& str, char delimiter) {
-    std::vector<std::string> tokens;
-    std::stringstream ss(str);
-    std::string token;
-    
-    while (std::getline(ss, token, delimiter)) {
-        tokens.push_back(token);
-    }
-    
-    return tokens;
+void Client::handleStateChange(const std::string& state) {
+    std::cout << "State changed: " << state << std::endl;
 }
 
-void Client::join(const std::string& channel) {
-    sendRaw("JOIN " + channel);
+void Client::handleConnectionError() {
+    std::cout << "Server closed connection" << std::endl;
+    _fd = -1;
 }
 
-void Client::part(const std::string& channel) {
-    sendRaw("PART " + channel);
+// Getters
+int Client::getFd() const { return _fd; }
+std::string Client::getNickname() const { return _nickname; }
+std::string Client::getUsername() const { return _username; }
+std::string Client::getRealname() const { return _realname; }
+std::string Client::getHostname() const { return _hostname; }
+std::string Client::getServername() const { return _servername; }
+std::time_t Client::getLastActivity() const { return _lastActivity; }
+bool Client::isAuthenticated() const { return _authenticated; }
+bool Client::isRegistered() const { return _registered; }
+bool Client::isPingSent() const {
+    return _pingSent;
+}
+std::time_t Client::getPingTime() const {
+    return _pingTime;
 }
 
-void Client::privmsg(const std::string& target, const std::string& message) {
-    sendRaw("PRIVMSG " + target + " :" + message);
+// Setters
+void Client::setAuthenticated(bool authenticated) {
+    _authenticated = authenticated;
 }
 
-void Client::quit(const std::string& message) {
-    sendRaw("QUIT :" + message);
+void Client::setRegistered(bool registered) {
+    _registered = registered;
 }
 
-void Client::pong(const std::string& server) {
-    sendRaw("PONG :" + server);
+void Client::setPingSent(bool pingSent) {
+    _pingSent = pingSent;
 }
 
-void Client::handlePing(const std::string& server) {
-    pong(server);
+void Client::setPingTime(std::time_t pingTime) {
+    _pingTime = pingTime;
 }
 
-void Client::displayMessage(const std::string& message) {
-    std::cout << "<< " << message << std::endl;
+// Channel management
+std::set<std::string> Client::getChannels() const {
+    return _channels;
+}
+
+bool Client::isInChannel(const std::string& channel) const {
+    std::set<std::string>::const_iterator it = _channels.find(channel);
+    return it != _channels.end();
 }
