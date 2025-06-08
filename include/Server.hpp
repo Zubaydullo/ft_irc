@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include "Client.hpp"
 #include "Channel.hpp"
-class Server{ 
+class Server { 
 
         private: 
             int _port;
@@ -37,7 +37,6 @@ class Server{
            void handelPass(int clinetFd ,  std::istringstream& iss);
            void handelNick(int clinetFd , std::istringstream& iss);
            void handelUser(int clinetFd ,  std::istringstream& iss);
-           void sendToClient(int clinetfd ,const  std::string& messagei);
            void handleKick(int clientFd , std::istringstream& iss);
            void handleMode(int clientFd , std::istringstream& iss);
            //Here handel the existing Users 
@@ -49,8 +48,9 @@ class Server{
            void handleInvite(int clientFd , std::istringstream& iss);
            void handleTopic(int clientFd , std::istringstream& iss);
            int findClientByNick(const std::string& nickname);
-
-
+        public: 
+           void sendToClient(int clinetfd ,const  std::string& message);
+            std::map<int, Client*>& getClients();
 };
 
 

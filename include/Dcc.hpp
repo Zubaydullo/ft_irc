@@ -12,7 +12,6 @@
 
 
 
-
 class Server;
 
 struct DCCTransfer{ 
@@ -30,6 +29,7 @@ struct DCCTransfer{
 };
 
 class DCCManager{ 
+    
 
         private:
             Server* _server;
