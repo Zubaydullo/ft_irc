@@ -8,6 +8,10 @@ obj/
 # Executable
 ircserv
 
+# Bot executable
+bot/ftbot
+bot/obj/
+
 # IDE specific files
 .vscode/
 .idea/

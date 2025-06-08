@@ -489,7 +489,7 @@ void Server::handleJoin(int clientFd , std::istringstream& iss){
       
     std::string channelName,password;
     iss >> channelName >> password;
-
+       
     if(!_Client[clientFd]->isRegistered()){
          
         sendToClient(clientFd , "451 :You have not registered");
