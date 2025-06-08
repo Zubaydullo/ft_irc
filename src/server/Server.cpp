@@ -450,6 +450,8 @@ void Server::handleTopic(int clientFd , std::istringstream& iss){
     
     }
 }
+
+
 void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
 
     std::string target , message;
@@ -463,15 +465,8 @@ void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
     std::string senderNick = _Client[clinetFd]->getNickname();
     std::cout << senderNick << " sends  to " << target << " : " << message << std::endl;
     if(target[0] == '#'){
-
-        if(_channels.find(target) != _channels.end() ){
-
-             std::cout << "The target  " << target << "enter here " << std::endl;
              std::vector <int> members = _channels[target]->getMembers();
              Channel * channel= _channels[target];
-             if(_channels.find(target) != _channels.end()){
-
-             
              for(std::vector<int>::iterator it  = members.begin() ;  it != members.end() ; ++it){
                   
                    int membersFd = *it;
@@ -485,11 +480,7 @@ void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
                           " \n message becasue he is not a member" << std::endl; 
                   }
              }
-             }else { 
-                    std::cout << "im here " << std::endl;
-             }
-         
-      }else{
+             }else{
                 for(std::map<int , Client*>::iterator it = _Client.begin() ; it != _Client.end() ; ++it){
                      
                     if(it->second->getNickname() == target){
@@ -502,9 +493,12 @@ void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
 
                 sendToClient(clinetFd , "401 " + senderNick  + " " + target + " No: such nick/channel");
          }
+    }
     
-}
-}
+
+
+
+
 void Server::handleJoin(int clientFd , std::istringstream& iss){
       
     std::string channelName,password;
