@@ -25,7 +25,7 @@ bool  Server::createSocket(){
     
       struct  sockaddr_in ServerAddr;
       ServerAddr.sin_family = AF_INET;
-      ServerAddr.sin_port = htons( _port);
+      ServerAddr.sin_port = htons(_port);
       ServerAddr.sin_addr.s_addr = INADDR_ANY;
      
        if(bind(SocketFd , (struct sockaddr* )&ServerAddr , sizeof(ServerAddr)) == -1){
@@ -149,6 +149,10 @@ void Server::removeClient(int ClinetFd){
         }
 
     }
+}
+std::map<int,Client*>& Server::getClients(){ 
+        
+    return _Client;
 }
 void Server::handleClientData(int ClinetFd){
 
@@ -459,17 +463,32 @@ void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
     std::string senderNick = _Client[clinetFd]->getNickname();
     std::cout << senderNick << " sends  to " << target << " : " << message << std::endl;
     if(target[0] == '#'){
-         if(_channels.find(target) != _channels.end() ){ 
+
+        if(_channels.find(target) != _channels.end() ){
+
+             std::cout << "The target  " << target << "enter here " << std::endl;
              std::vector <int> members = _channels[target]->getMembers();
+             Channel * channel= _channels[target];
+             if(_channels.find(target) != _channels.end()){
+
+             
              for(std::vector<int>::iterator it  = members.begin() ;  it != members.end() ; ++it){
                   
                    int membersFd = *it;
-                  if(membersFd != clinetFd){
+                   
+                  if((membersFd != clinetFd  && channel->isMember(clinetFd))){
                     
                  sendToClient(membersFd , ":" + senderNick + " PRIVMSG " + target + " :" + message );
+                  }else{ 
+                     sendToClient(clinetFd , "Your are not a Member on the channel : " + target);
+                     std::cout << "The Client Fd " << clinetFd << " won't be able to send the "   <<  
+                          " \n message becasue he is not a member" << std::endl; 
                   }
              }
-         }
+             }else { 
+                    std::cout << "im here " << std::endl;
+             }
+         
       }else{
                 for(std::map<int , Client*>::iterator it = _Client.begin() ; it != _Client.end() ; ++it){
                      
@@ -484,6 +503,7 @@ void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
                 sendToClient(clinetFd , "401 " + senderNick  + " " + target + " No: such nick/channel");
          }
     
+}
 }
 void Server::handleJoin(int clientFd , std::istringstream& iss){
       
