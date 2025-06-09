@@ -145,15 +145,22 @@ void Server::removeClient(int ClinetFd){
     for(std::vector<struct pollfd>::iterator pollIt = _pollfd.begin(); pollIt != _pollfd.end(); ++pollIt ){
         if(pollIt->fd == ClinetFd){
             _pollfd.erase(pollIt);
+            // delete the client from the map
+            delete _Client[ClinetFd];
+            _Client.erase(ClinetFd);
+            close(ClinetFd);
+            std::cout << "Client " << ClinetFd << " disconnected" << std::endl;
             break;
         }
 
     }
 }
+
 std::map<int,Client*>& Server::getClients(){ 
         
     return _Client;
 }
+
 void Server::handleClientData(int ClinetFd){
 
     char buffer[1024];
@@ -203,7 +210,9 @@ void Server::parseCommand(int  clinetFd, const std::string& message){
     }else if(command == "TOPIC"){
          handleTopic(clinetFd , iss);
     }else {
-        std::cout << "Unknown  Command :  " << command   << std::endl;    
+        std::cout << "Unknown  Command :  " << command   << std::endl;
+        sendToClient(clinetFd , "421 " + command + " :Unknown command");
+        return;
         //TODO: we neeed to handle the  unknown command here later
     }
     
@@ -594,6 +603,7 @@ void Server::handlePart(int clientFd, std::istringstream& iss){
         }
     }
 }
+
 void Server::handelPass(int clinetFd ,  std::istringstream& iss) {
            
     std::string password;
@@ -603,23 +613,35 @@ void Server::handelPass(int clinetFd ,  std::istringstream& iss) {
             std::cout << "The password correct for clinet  " << clinetFd << std::endl;
             _Client[clinetFd]->setAuthenticated(true);
     }else{
-
+        sendToClient(clinetFd , "464 " + _Client[clinetFd]->getNickname() + " :Password incorrect");
         std::cout << "Wrong password from clinet  : "  << clinetFd<< std::endl;
         //TODO: handell the error after 
     }
 }
+
 void Server::sendToClient(int clientFd,const  std::string& message){
         
     std::string msg = message + "\r\n";
     send(clientFd ,msg.c_str(), msg.length(),0 );
     std::cout <<  "Sent to the Client " << clientFd << " : " << message << std::endl; 
 }
-void Server::handelNick(int clientFd, std::istringstream& iss){ 
-        std::string nickName;
+
+void Server::handelNick(int clientFd, std::istringstream& iss)
+{ 
+    std::string nickName;
     iss >> nickName;
-        std::cout << "Clinet  :"  << clientFd << " Wants  nickname:" << nickName << std::endl;
-        
-      _Client[clientFd]->setNickname(nickName);     
+    if(nickName.empty()){
+        sendToClient(clientFd , "431 " + _Client[clientFd]->getNickname() + " :No nickname given");
+        return;
+    }
+    std::cout << "Clinet  :"  << clientFd << " Wants  nickname:" << nickName << std::endl;
+    for(std::map<int, Client*>::iterator it = _Client.begin() ; it != _Client.end() ; ++it){
+        if(it->second->getNickname() == nickName){
+            sendToClient(clientFd , "433 " + _Client[clientFd]->getNickname() + " :Nickname is already taken");
+            return;
+        }
+    }
+    _Client[clientFd]->setNickname(nickName);     
  
 }
 
@@ -629,8 +651,19 @@ void Server::handelUser(int clinetFd , std::istringstream& iss){
      iss  >> username >> hostname >> servername;
      std::getline(iss, realname);
 
+    if(username.empty() || hostname.empty() || servername.empty() || realname.empty()){
+        sendToClient(clinetFd , "461 " + _Client[clinetFd]->getNickname() + " :Not enough parameters");
+        return;
+    }
+    // check if the username is already taken
+    for(std::map<int, Client*>::iterator it = _Client.begin() ; it != _Client.end() ; ++it){
+        if(it->second->getUsername() == username){
+            sendToClient(clinetFd , "433 " + _Client[clinetFd]->getUsername() + " :Username is already taken");
+            return;
+        }
+    }
     std::cout << "ClinedFd" << clinetFd << " user info : " << username << std::endl;
-        
+
     _Client[clinetFd]->setUsername(username);
     _Client[clinetFd]->setRealname(realname);
     if(_Client[clinetFd]->isAuthenticated() && !_Client[clinetFd]->getNickname().empty()){

@@ -92,7 +92,7 @@ bool Client::isConnected() const {
     return connected;
 }
 
-void Client::setNickname(const std::string& nick) {
+void Client::setNickname(const std::string& nick){
     nickname = nick;
 }
 

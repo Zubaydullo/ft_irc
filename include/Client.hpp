@@ -70,6 +70,8 @@ public:
     void setAuthenticated(bool auth) { authenticated = auth; }
     void setRegistered(bool reg) { registered = reg; }
     std::string  getNickname() { return nickname;}
+    std::string  getUsername() { return username;}
+    std::string  getRealname() { return realname;}
     //NOTE: haithem finish public add on //
 };
 
