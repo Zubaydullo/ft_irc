@@ -39,6 +39,7 @@ class Server {
            void handelUser(int clinetFd ,  std::istringstream& iss);
            void handleKick(int clientFd , std::istringstream& iss);
            void handleMode(int clientFd , std::istringstream& iss);
+           void handleNames(int clientFd , std::istringstream& iss);
            //Here handel the existing Users 
 
            // Handel the  Users && Operators 

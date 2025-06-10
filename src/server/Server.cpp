@@ -209,7 +209,10 @@ void Server::parseCommand(int  clinetFd, const std::string& message){
          handleInvite(clinetFd , iss);
     }else if(command == "TOPIC"){
          handleTopic(clinetFd , iss);
-    }else {
+    }else if (command == "NAMES"){
+         handleNames(clinetFd , iss);
+    }
+    else {
         std::cout << "Unknown  Command :  " << command   << std::endl;
         sendToClient(clinetFd , "421 " + command + " :Unknown command");
         return;
@@ -460,6 +463,33 @@ void Server::handleTopic(int clientFd , std::istringstream& iss){
     }
 }
 
+void Server::handleNames(int clientFd , std::istringstream& iss){
+    std::string channelName;
+    iss >> channelName;
+    if(_channels.find(channelName) == _channels.end()){
+        sendToClient(clientFd , "403 " + _Client[clientFd]->getNickname() + " " + channelName + " :No such channel");
+        return;
+    }
+    
+    std::vector<int> members = _channels[channelName]->getMembers();
+    std::string namesList = "";
+    
+    for(std::vector<int>::iterator it = members.begin() ; it != members.end() ; ++it){
+        if(!namesList.empty()) {
+            namesList += " ";
+        }
+        // Add @ prefix for operators
+        if(_channels[channelName]->isOperator(*it)) {
+            namesList += "@";
+        }
+        namesList += _Client[*it]->getNickname();
+    }
+    
+    // Send 353 RPL_NAMREPLY to the requesting client
+    sendToClient(clientFd, "353 " + _Client[clientFd]->getNickname() + " = " + channelName + " :" + namesList);
+    // Send 366 RPL_ENDOFNAMES to the requesting client
+    sendToClient(clientFd, "366 " + _Client[clientFd]->getNickname() + " " + channelName + " :End of /NAMES list");
+}
 
 void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
 
