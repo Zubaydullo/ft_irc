@@ -160,66 +160,230 @@ std::map<int,Client*>& Server::getClients(){
         
     return _Client;
 }
-
 void Server::handleClientData(int ClinetFd){
-
     char buffer[1024];
-    int bytesRead = recv(ClinetFd,buffer , sizeof(buffer) - 1 , 0);
+    int bytesRead = recv(ClinetFd, buffer, sizeof(buffer) - 1, 0);
     if(bytesRead <= 0){
-         
         removeClient(ClinetFd);
         return;
     }
     buffer[bytesRead] = '\0';
-    std::string message(buffer);
-    std::cout << "Received From Clinet " << ClinetFd << ": " << message << std::endl;
-    parseCommand(ClinetFd , message);
+    std::string newData(buffer);
+    
+    // Add to client's input buffer for partial message handling
+    _Client[ClinetFd]->addToInBuffer(newData);
+    
+    // Process complete messages (ending with \r\n or \n)
+    std::string &inBuffer = _Client[ClinetFd]->getInBuffer();
+    size_t pos = 0;
+    
+    // Look for complete messages ending with \r\n or \n
+    while ((pos = inBuffer.find("\r\n")) != std::string::npos || 
+           (pos = inBuffer.find("\n")) != std::string::npos) {
+        
+        std::string completeMessage = inBuffer.substr(0, pos);
+        
+        // Remove the processed message from buffer
+        if (pos < inBuffer.length() - 1 && inBuffer.substr(pos, 2) == "\r\n") {
+            inBuffer.erase(0, pos + 2);
+        } else {
+            inBuffer.erase(0, pos + 1);
+        }
+        
+        if (!completeMessage.empty()) {
+            // Clean up the message
+            std::replace(completeMessage.begin(), completeMessage.end(), '\r', ' ');
+            
+            std::cout << "Received From Client " << ClinetFd << ": " << completeMessage << std::endl;
+            parseCommand(ClinetFd, completeMessage);
+        }
+    }
 }
 
-// HACK: START  implement the  command  
+
+void Server::handleDCC(int clientFd, std::istringstream& iss) {
+    std::string line;
+    std::getline(iss, line);
+    
+    size_t dcc_pos = line.find("DCC SEND");
+    if (dcc_pos == std::string::npos) {
+        sendToClient(clientFd, "421 " + _Client[clientFd]->getNickname() + " DCC :Invalid DCC message format");
+        return;
+    }
+    
+    std::istringstream dccStream(line);
+    std::string target;
+    dccStream >> target;
+    
+    std::string dccContent;
+    std::getline(dccStream, dccContent);
+    std::istringstream dccParams(line.substr(dcc_pos));
+    std::string dummy1, dummy2, filename, ip_str, port_str, size_str;
+    dccParams >> dummy1 >> dummy2 >> filename >> ip_str >> port_str >> size_str;
+    
+    std::string senderNick = _Client[clientFd]->getNickname();
+    std::string senderUser = _Client[clientFd]->getUsername();
+    std::string senderIP = "127.0.0.1"; // You might want to get real IP
+    
+    std::string dccMessage = "\001DCC SEND " + filename + " " + ip_str + " " + port_str + " " + size_str + "\001";
+    
+    std::string ctcpMessage = ":" + senderNick + "!~" + senderUser + "@" + senderIP + 
+                             " PRIVMSG " + target + " :" + dccMessage;
+    
+    int targetFd = findClientByNick(target);
+    if (targetFd == -1) {
+        sendToClient(clientFd, "401 " + senderNick + " " + target + " :No such nick");
+        return;
+    }
+    
+    sendToClient(targetFd, ctcpMessage);
+    
+    std::cout << "DCC: Relayed DCC SEND request from " << senderNick << " to " << target 
+              << " for file: " << filename << std::endl;
+    
+    sendToClient(clientFd, ":Server NOTICE " + senderNick + " :DCC request sent to " + target);
+}
 
 
-void Server::parseCommand(int  clinetFd, const std::string& message){
+void Server::parseCommand(int clientFd, const std::string& message){
      
-    std::cout << "Parsing command from client " << clinetFd << ":" << std::endl;
+    std::cout << "Parsing command from client " << clientFd << ":" << std::endl;
 
     std::istringstream iss(message);
     std::string command;
     iss >> command;
-    if(command == "PASS" ){
-         handelPass(clinetFd , iss);
+
+    // Convert command to uppercase for consistency
+    for (std::string::iterator it = command.begin(); it != command.end(); ++it) {
+        *it = toupper(*it);
     }
-    else if(command == "NICK"){ 
-        handelNick(clinetFd, iss);
-    }
-    else if(command == "USER"){
-         handelUser(clinetFd, iss);
-    }else if(command == "JOIN"){ 
-         handleJoin(clinetFd , iss);
-    }else if(command == "PART"){
-         handlePart(clinetFd, iss);    
-    }else if(command == "PRIVMSG"){
-         handlePrivmsg(clinetFd , iss);
-    }else if(command == "KICK"){
-         handleKick(clinetFd , iss); 
-    }else if(command == "MODE"){
-        //TODO: implement the mode 
-         handleMode(clinetFd , iss);
-    }else if(command == "INVITE"){
-         handleInvite(clinetFd , iss);
-    }else if(command == "TOPIC"){
-         handleTopic(clinetFd , iss);
-    }else if (command == "NAMES"){
-         handleNames(clinetFd , iss);
-    }
-    else {
-        std::cout << "Unknown  Command :  " << command   << std::endl;
-        sendToClient(clinetFd , "421 " + command + " :Unknown command");
+
+    // Handle CAP before authentication - CRITICAL for modern IRC clients
+    if(command == "CAP") {
+        std::string subcommand;
+        iss >> subcommand;
+        
+        for (std::string::iterator it = subcommand.begin(); it != subcommand.end(); ++it) {
+            *it = toupper(*it);
+        }
+        
+        if (subcommand == "LS") {
+            sendToClient(clientFd, ":localhost CAP * LS :multi-prefix sasl");
+        } else if (subcommand == "REQ") {
+            std::string capabilities;
+            std::getline(iss, capabilities);
+            // Remove leading space and colon if present
+            if (!capabilities.empty() && capabilities[0] == ' ') capabilities = capabilities.substr(1);
+            if (!capabilities.empty() && capabilities[0] == ':') capabilities = capabilities.substr(1);
+            
+            sendToClient(clientFd, ":localhost CAP * ACK :" + capabilities);
+        } else if (subcommand == "END") {
+            // Client finished capability negotiation - no response needed
+            std::cout << "Client " << clientFd << " ended CAP negotiation" << std::endl;
+        }
         return;
-        //TODO: we neeed to handle the  unknown command here later
     }
     
-}    
+    // Handle PING before authentication 
+    if(command == "PING") {
+        std::string server;
+        iss >> server;
+        if (!server.empty() && server[0] == ':') server = server.substr(1);
+        sendToClient(clientFd, ":localhost PONG localhost :" + server);
+        return;
+    }
+
+    // Authentication commands - these should work even without password for irssi
+    if(command == "PASS" ){
+         handelPass(clientFd , iss);
+         return;
+    }
+    else if(command == "NICK"){ 
+        handelNick(clientFd, iss);
+        return;
+    }
+    else if(command == "USER"){
+         handelUser(clientFd, iss);
+         return;
+    }
+    
+    // For JOIN command, check if it's the initial empty join that irssi sends
+    if(command == "JOIN") {
+        std::string channel;
+        iss >> channel;
+        
+        // irssi sends "JOIN :" during connection - ignore this
+        if (channel == ":") {
+            std::cout << "Ignoring empty JOIN command from irssi" << std::endl;
+            return;
+        }
+        
+        // Check authentication for real joins
+        if(!_Client[clientFd]->isAuthenticated()) {
+            sendToClient(clientFd, ":localhost 451 " + _Client[clientFd]->getNickname() + " :You have not registered");
+            return;
+        }
+        handleJoin(clientFd , iss);
+        return;
+    }
+    
+    // Check authentication for other commands
+    if(!_Client[clientFd]->isAuthenticated()) {
+        std::string nick = _Client[clientFd]->getNickname();
+        if (nick.empty()) nick = "*";
+        sendToClient(clientFd, ":localhost 451 " + nick + " :You have not registered");
+        return;
+    }
+    
+    // Authenticated commands
+    if(command == "PART"){
+         handlePart(clientFd, iss);    
+    }else if(command == "PRIVMSG"){
+         handlePrivmsg(clientFd , iss);
+    }else if(command == "KICK"){
+         handleKick(clientFd , iss); 
+    }else if(command == "MODE"){
+         handleMode(clientFd , iss);
+    }else if(command == "INVITE"){
+         handleInvite(clientFd , iss);
+    }else if(command == "TOPIC"){
+         handleTopic(clientFd , iss);
+    }else if (command == "NAMES"){
+         handleNames(clientFd , iss);
+    }else if(command == "DCC") {
+        std::string subcommand, target, filename;
+        iss >> subcommand >> target >> filename;
+        
+        if (subcommand == "SEND") {
+            if (target.empty() || filename.empty()) {
+                sendToClient(clientFd, ":localhost NOTICE " + _Client[clientFd]->getNickname() + " :Usage: DCC SEND <target> <filename>");
+                return;
+            }
+            
+            std::ifstream file(filename.c_str(), std::ios::binary | std::ios::ate);
+            unsigned long fileSize = 23; // default
+            if (file.is_open()) {
+                fileSize = file.tellg();
+                file.close();
+            }
+            
+            std::string privmsgCmd = "PRIVMSG " + target + " :\001DCC SEND " + filename + " 2130706433 8000 " + std::to_string(fileSize) + "\001";
+            
+            std::istringstream privmsgStream(privmsgCmd);
+            parseCommand(clientFd, privmsgCmd);
+            
+            std::cout << "DCC: Converted DCC SEND to PRIVMSG format" << std::endl;
+        } else {
+            sendToClient(clientFd, ":localhost 421 " + _Client[clientFd]->getNickname() + " " + subcommand + " :Unknown DCC subcommand");
+        }
+    }else {
+        std::cout << "Unknown Command: " << command << std::endl;
+        std::string nick = _Client[clientFd]->getNickname();
+        if (nick.empty()) nick = "*";
+        sendToClient(clientFd, ":localhost 421 " + nick + " " + command + " :Unknown command");
+        return;
+    }
+}
 
 int Server::findClientByNick(const std::string& nickname){
      
@@ -485,9 +649,7 @@ void Server::handleNames(int clientFd , std::istringstream& iss){
         namesList += _Client[*it]->getNickname();
     }
     
-    // Send 353 RPL_NAMREPLY to the requesting client
     sendToClient(clientFd, "353 " + _Client[clientFd]->getNickname() + " = " + channelName + " :" + namesList);
-    // Send 366 RPL_ENDOFNAMES to the requesting client
     sendToClient(clientFd, "366 " + _Client[clientFd]->getNickname() + " " + channelName + " :End of /NAMES list");
 }
 
@@ -500,6 +662,11 @@ void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
 
     if(!message.empty() && message[0] == ' ') message = message.substr(1);
     if(!message.empty() && message[0] == ':')  message = message.substr(1);
+   if (message.find("DCC SEND") != std::string::npos || message.find("\001DCC SEND") != std::string::npos) {
+        std::istringstream dccStream(target + " " + message);
+        handleDCC(clinetFd, dccStream);
+        return;
+    }
 
     std::string senderNick = _Client[clinetFd]->getNickname();
     std::cout << senderNick << " sends  to " << target << " : " << message << std::endl;
@@ -696,14 +863,17 @@ void Server::handelUser(int clinetFd , std::istringstream& iss){
 
     _Client[clinetFd]->setUsername(username);
     _Client[clinetFd]->setRealname(realname);
-    if(_Client[clinetFd]->isAuthenticated() && !_Client[clinetFd]->getNickname().empty()){
-
-        _Client[clinetFd]->setRegistered(true);
-        std::cout << "ClinetFd " << clinetFd << " is now fully registered "  << std::endl;
-        sendToClient(clinetFd , "001 -> " + _Client[clinetFd]->getNickname() + " :Welcome to the IRC Server!" );    
-        sendToClient(clinetFd , "002 -> " + _Client[clinetFd]->getNickname() + " :Your host is localhost" );    
-        sendToClient(clinetFd , "003 -> " + _Client[clinetFd]->getNickname() + " :Server created recently" );    
-    }
+  
+   if(_Client[clinetFd]->isAuthenticated() && !_Client[clinetFd]->getNickname().empty()){
+    _Client[clinetFd]->setRegistered(true);
+    std::cout << "ClinetFd " << clinetFd << " is now fully registered "  << std::endl;
+    
+    std::string nick = _Client[clinetFd]->getNickname();
+    sendToClient(clinetFd, ":localhost 001 " + nick + " :Welcome to the IRC Server!");    
+    sendToClient(clinetFd, ":localhost 002 " + nick + " :Your host is localhost");    
+    sendToClient(clinetFd, ":localhost 003 " + nick + " :Server created recently");    
+    sendToClient(clinetFd, ":localhost 004 " + nick + " localhost v1.0 o o");
+   }
 }
 
 

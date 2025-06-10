@@ -22,6 +22,7 @@ private:
     std::string realname;
     bool connected;
     //NOTE: haithem  add modificatin  ------------/
+    std::string _inBuffer;
     bool authenticated; 
     bool registered;
     //NOTE: haithem modification end ------/
@@ -72,6 +73,8 @@ public:
     std::string  getNickname() { return nickname;}
     std::string  getUsername() { return username;}
     std::string  getRealname() { return realname;}
+    void addToInBuffer(const std::string& data) { _inBuffer += data; }
+    std::string& getInBuffer() { return _inBuffer; }
     //NOTE: haithem finish public add on //
 };
 

@@ -7,9 +7,13 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <string>
+#include <vector>
+#include <map>
 #include <unistd.h>
 #include "Client.hpp"
 #include "Channel.hpp"
+#include <fstream>
 class Server { 
 
         private: 
@@ -40,6 +44,7 @@ class Server {
            void handleKick(int clientFd , std::istringstream& iss);
            void handleMode(int clientFd , std::istringstream& iss);
            void handleNames(int clientFd , std::istringstream& iss);
+           void handleDCC(int clientFd, std::istringstream& iss);
            //Here handel the existing Users 
 
            // Handel the  Users && Operators 
