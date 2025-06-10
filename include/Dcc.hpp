@@ -36,12 +36,15 @@ class DCCManager{
             std::map<std::string, DCCTransfer>_activeTransfers;
             int _nextPort;
         // Helper Function 
+         bool createFileReceiver(const std::string& transferId);
+         void receiveFileProcess(const DCCTransfer& transfer, const std::string& transferId);
          std::string generateTransferId(const std::string& sender , const std::string& reciver , const std::string& fileName);
          unsigned long ipToLong(const std::string& ip);
          std::string longToIp(unsigned long ip);
          int createLisentSocket(int port);
          void sendDCCOffer(const std::string& sender ,const std::string& reciver , const DCCTransfer& transfer);
          void sendDCCAffer(const std::string& sender ,const std::string& reciver , const DCCTransfer& transferId);
+         void sendDCCAccept(const std::string& sender, const std::string& receiver, const std::string& transferId); 
          void notifyTransferComplete(const DCCTransfer& transfer);
          void notifyTransferFailed(const DCCTransfer& transfer , const std::string& reason);
         public:
@@ -54,9 +57,10 @@ class DCCManager{
       //Trasfer  managment
       
        void handleDCCData(int socket);
+       void handleDCCReceive(int socket);
        void cancelTransfer(const std::string& transferId);
        void cleanupTransfer(const std::string& transferId);
-
+        void showActiveTransfers(int clientFd);   
        //status function
        std::vector<std::string> getActiveTransfer() const;
        DCCTransfer* getTransfer(const std::string& transferId);

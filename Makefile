@@ -18,9 +18,11 @@ OPERATOR_CMD_DIR = $(COMMANDS_DIR)/operator
 BONUS_CMD_DIR = $(COMMANDS_DIR)/bonus
 UTILS_DIR = $(SRC_DIR)/utils
 MESSAGE_DIR = $(SRC_DIR)/message
+DCC_DIR = $(SRC_DIR)/dcc
 
 # Source files
 SRC = $(SRC_DIR)/main.cpp \
+      $(DCC_DIR)/Dcc.cpp \
       $(SERVER_DIR)/Server.cpp \
       $(SERVER_DIR)/ServerInit.cpp \
       $(SERVER_DIR)/ServerSocket.cpp \
@@ -68,8 +70,10 @@ OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 $(OBJ_DIR):
 	@mkdir -p $(OBJ_DIR) \
 		$(OBJ_DIR)/server \
+		$(OBJ_DIR)/dcc \
 		$(OBJ_DIR)/client \
 		$(OBJ_DIR)/channel \
+		$(OBJ_DIR)/commands \
 		$(OBJ_DIR)/commands/basic \
 		$(OBJ_DIR)/commands/channel \
 		$(OBJ_DIR)/commands/messaging \

@@ -7,6 +7,8 @@ Server::Server(int port , std::string& Password):_port(port)
         ,_password(Password) ,_serverSocket(-1) , _running(false) {
 
             std::cout  << "Server Created with port " << _port << std::endl;
+    _dccManager = new DCCManager(this);
+    std::cout << "DCC Manager initialized" << std::endl;
 }
 
 //---------- Socket init --------------//
@@ -52,6 +54,9 @@ bool  Server::createSocket(){
 
 //----------- Socket init end -----------------//
 
+DCCManager*  Server::getDCCManager(){ 
+    return _dccManager;
+}
 void  Server::acceptNewClient(){
      
         struct sockaddr_in ClientAddr;
@@ -88,13 +93,14 @@ void Server::Start(){
     std::cout  << "Server Started successfully " << std::endl;
    
     while(_running){
-         
-         int activity = poll(_pollfd.data(),_pollfd.size() , -1);
+          if (_dccManager) {
+            _dccManager->processTransfers();
+        }
+         int activity = poll(_pollfd.data(),_pollfd.size() , 100);
          if(activity == -1){
               std::cerr << "Poll Error" << std::endl;
                 break;
          }
-         std::cout << "Activity detected " << activity << "socket(s)" << std::endl;
         for(size_t i = 0 ; i < _pollfd.size() ;  i++){
              if(!(_pollfd[i].revents & POLLIN))
                 continue;
@@ -192,7 +198,35 @@ void Server::parseCommand(int  clinetFd, const std::string& message){
     }else if(command == "PART"){
          handlePart(clinetFd, iss);    
     }else if(command == "PRIVMSG"){
-         handlePrivmsg(clinetFd , iss);
+        std::string originalMessage = message;
+        if(originalMessage.find("\001DCC") != std::string::npos){
+              handleDCC(clinetFd , iss);
+        }else {    
+        handlePrivmsg(clinetFd , iss);
+        }
+    }else if(command == "DCC"){
+               handleDCC(clinetFd , iss);
+    }else if(command == "DCCACCEPT"){
+            std::string transferId;
+         iss >> transferId;
+         handleDCCAccept(clinetFd, transferId);
+    }else if(command =="DCCREJECT"){
+                std::string transferId;
+         iss >> transferId;
+         handleDCCReject(clinetFd, transferId);
+    }else if(command == "SHOWDCC"){
+    if (_dccManager) {
+        std::cout << "=== Active Transfers Debug ===" << std::endl;
+        sendToClient(clinetFd, ":Server NOTICE " + _Client[clinetFd]->getNickname() + " :=== Active DCC Transfers ===");
+        
+        // Access _activeTransfers directly through DCCManager
+        
+        // You'll need to add this simple function to DCCManager
+        _dccManager->showActiveTransfers(clinetFd);
+        
+    } else {
+        sendToClient(clinetFd, ":Server NOTICE " + _Client[clinetFd]->getNickname() + " :DCC Manager not initialized");
+    }
     }else if(command == "KICK"){
          handleKick(clinetFd , iss); 
     }else if(command == "MODE"){
@@ -208,7 +242,118 @@ void Server::parseCommand(int  clinetFd, const std::string& message){
     }
     
 }    
+void Server::handleDCC(int clientFd, std::istringstream& iss) {
+    std::string firstParam;
+    iss >> firstParam;
+    
+    std::string senderNick = _Client[clientFd]->getNickname();
+    
+    // Check if this is a direct DCC command (like "DCC SEND zabdirak test.txt")
+    if (firstParam == "SEND") {
+        // Direct DCC command format: DCC SEND target filename
+        std::string target, fileName;
+        iss >> target >> fileName;
+        
+        std::cout << "Direct DCC SEND request from " << senderNick << " to " << target 
+                  << " file: " << fileName << std::endl;
+        
+        int targetFd = findClientByNick(target);
+        if (targetFd == -1) {
+            sendToClient(clientFd, "401 " + senderNick + " " + target + " :No such nick");
+            return;
+        }
+        
+        // Create the full file path
+        std::string fullPath = "./" + fileName;
+        
+        if (_dccManager) {
+            bool success = _dccManager->initiateDCCSend(senderNick, target, fullPath);
+            if (!success) {
+                sendToClient(clientFd, ":Server NOTICE " + senderNick + " :Failed to initiate DCC transfer - file not found: " + fileName);
+            }
+        }
+        return;
+    }
+    
+    // Otherwise, this is a PRIVMSG DCC format: target \001DCC SEND filename ip port size\001
+    std::string target = firstParam;
+    std::string restOfMessage;
+    std::getline(iss, restOfMessage);
+    
+    // Parse DCC message from PRIVMSG
+    size_t start = restOfMessage.find("\001DCC");
+    if (start != std::string::npos) {
+        start += 4; // Skip "\001DCC"
+        size_t end = restOfMessage.find("\001", start);
+        if (end != std::string::npos) {
+            restOfMessage = restOfMessage.substr(start, end - start);
+        } else {
+            restOfMessage = restOfMessage.substr(start);
+        }
+    }
+    
+    std::istringstream dccIss(restOfMessage);
+    std::string dccCommand, fileName, ip, port, fileSize;
+    dccIss >> dccCommand;
+    
+    if (dccCommand == "SEND") {
+        dccIss >> fileName >> ip >> port >> fileSize;
+        
+        std::cout << "PRIVMSG DCC SEND request from " << senderNick << " to " << target 
+                  << " file: " << fileName << std::endl;
+        
+        int targetFd = findClientByNick(target);
+        if (targetFd == -1) {
+            sendToClient(clientFd, "401 " + senderNick + " " + target + " :No such nick");
+            return;
+        }
+        
+        // Create the full file path
+        std::string fullPath = "./" + fileName;
+        
+        if (_dccManager) {
+            bool success = _dccManager->initiateDCCSend(senderNick, target, fullPath);
+            if (!success) {
+                sendToClient(clientFd, ":Server NOTICE " + senderNick + " :Failed to initiate DCC transfer - file not found: " + fileName);
+            }
+        }
+    }
+    else if (dccCommand == "ACCEPT") {
+        std::string transferId;
+        dccIss >> transferId;
+        handleDCCAccept(clientFd, transferId);
+    }
+    else if (dccCommand == "REJECT") {
+        std::string transferId;
+        dccIss >> transferId;
+        handleDCCReject(clientFd, transferId);
+    }
+    else {
+        std::cout << "Unknown DCC command: " << dccCommand << std::endl;
+        sendToClient(clientFd, "421 " + senderNick + " " + dccCommand + " :Unknown command");
+    }
+}
+void Server::handleDCCAccept(int clientFd, const std::string& transferId) {
+    std::string receiverNick = _Client[clientFd]->getNickname();
+    
+    if (_dccManager) {
+        bool success = _dccManager->acceptDCCTransfer(receiverNick, transferId);
+        if (!success) {
+            sendToClient(clientFd, ":Server NOTICE " + receiverNick + " :Failed to accept DCC transfer " + transferId);
+        }
+    }
+}
 
+void Server::handleDCCReject(int clientFd, const std::string& transferId) {
+    std::string receiverNick = _Client[clientFd]->getNickname();
+    
+    if (_dccManager) {
+        bool success = _dccManager->rejectDCCTransfer(receiverNick, transferId);
+        if (!success) {
+            sendToClient(clientFd, ":Server NOTICE " + receiverNick + " :Failed to reject DCC transfer " + transferId);
+        }
+    }
+}
 int Server::findClientByNick(const std::string& nickname){
      
     for(std::map<int , Client*>::iterator it = _Client.begin() ; it != _Client.end(); ++it  ){
@@ -464,12 +609,9 @@ void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
     std::cout << senderNick << " sends  to " << target << " : " << message << std::endl;
     if(target[0] == '#'){
 
-        if(_channels.find(target) != _channels.end() ){
 
-             std::cout << "The target  " << target << "enter here " << std::endl;
              std::vector <int> members = _channels[target]->getMembers();
              Channel * channel= _channels[target];
-             if(_channels.find(target) != _channels.end()){
 
              
              for(std::vector<int>::iterator it  = members.begin() ;  it != members.end() ; ++it){
@@ -485,11 +627,8 @@ void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
                           " \n message becasue he is not a member" << std::endl; 
                   }
              }
-             }else { 
-                    std::cout << "im here " << std::endl;
-             }
          
-      }else{
+    }else{
                 for(std::map<int , Client*>::iterator it = _Client.begin() ; it != _Client.end() ; ++it){
                      
                     if(it->second->getNickname() == target){
@@ -504,7 +643,7 @@ void Server::handlePrivmsg(int clinetFd , std::istringstream& iss) {
          }
     
 }
-}
+
 void Server::handleJoin(int clientFd , std::istringstream& iss){
       
     std::string channelName,password;
@@ -653,5 +792,30 @@ void Server::handelUser(int clinetFd , std::istringstream& iss){
 
 Server::~Server(){
         
-        std::cout << "cnx closed" << std::endl;
+    if (_dccManager) {
+        delete _dccManager;
+        _dccManager = NULL;
+    }
+    
+    // Clean up clients
+    for (std::map<int, Client*>::iterator it = _Client.begin(); it != _Client.end(); ++it) {
+        if (it->second) {
+            delete it->second;
+        }
+    }
+    _Client.clear();
+    
+    // Clean up channels
+    for (std::map<std::string, Channel*>::iterator it = _channels.begin(); it != _channels.end(); ++it) {
+        if (it->second) {
+            delete it->second;
+        }
+    }
+    _channels.clear();
+    
+    if (_serverSocket != -1) {
+        close(_serverSocket);
+    }
+    
+    std::cout << "Server destroyed and resources cleaned up" << std::endl;
 }

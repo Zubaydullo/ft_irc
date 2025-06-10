@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include "Client.hpp"
 #include "Channel.hpp"
+#include "Dcc.hpp"
 class Server { 
 
         private: 
@@ -29,8 +30,8 @@ class Server {
            void Start();
            void Stop();
         private:
-           bool createSocket();
-           void acceptNewClient();
+           bool createSocket();  // start create socket 
+           void acceptNewClient(); 
            void handleClientData(int ClinetFd);
            void removeClient(int clinetFd);
            void parseCommand(int clinetFd , const std::string& message);
@@ -39,6 +40,7 @@ class Server {
            void handelUser(int clinetFd ,  std::istringstream& iss);
            void handleKick(int clientFd , std::istringstream& iss);
            void handleMode(int clientFd , std::istringstream& iss);
+           DCCManager* _dccManager;
            //Here handel the existing Users 
 
            // Handel the  Users && Operators 
@@ -47,10 +49,15 @@ class Server {
            void handlePrivmsg(int clientFd , std::istringstream& iss);
            void handleInvite(int clientFd , std::istringstream& iss);
            void handleTopic(int clientFd , std::istringstream& iss);
-           int findClientByNick(const std::string& nickname);
+              // DCC command handlers
+           void handleDCC(int clientFd, std::istringstream& iss);
+           void handleDCCAccept(int clientFd, const std::string& transferId);
+           void handleDCCReject(int clientFd, const std::string& transferId);
         public: 
            void sendToClient(int clinetfd ,const  std::string& message);
-            std::map<int, Client*>& getClients();
+           int findClientByNick(const std::string& nickname);
+           std::map<int, Client*>& getClients();
+           DCCManager* getDCCManager();
 };
 
 
