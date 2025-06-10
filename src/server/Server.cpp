@@ -367,7 +367,10 @@ void Server::parseCommand(int clientFd, const std::string& message){
                 file.close();
             }
             
-            std::string privmsgCmd = "PRIVMSG " + target + " :\001DCC SEND " + filename + " 2130706433 8000 " + std::to_string(fileSize) + "\001";
+            std::stringstream ss;
+            ss << fileSize;
+            std::string fileSizeStr = ss.str();
+            std::string privmsgCmd = "PRIVMSG " + target + " :\001DCC SEND " + filename + " 2130706433 8000 " + fileSizeStr + "\001";
             
             std::istringstream privmsgStream(privmsgCmd);
             parseCommand(clientFd, privmsgCmd);
@@ -879,6 +882,42 @@ void Server::handelUser(int clinetFd , std::istringstream& iss){
 
 
 Server::~Server(){
-        
-        std::cout << "cnx closed" << std::endl;
+    std::cout << "Server destructor called - cleaning up resources..." << std::endl;
+    
+    // Stop the server if it's still running
+    _running = false;
+    
+    // Clean up all clients
+    for(std::map<int, Client*>::iterator it = _Client.begin(); it != _Client.end(); ++it) {
+        if(it->second) {
+            std::cout << "Cleaning up client " << it->first << std::endl;
+            close(it->first);  // Close client socket
+            delete it->second; // Delete client object
+        }
+    }
+    _Client.clear();
+    
+    // Clean up all channels
+    for(std::map<std::string, Channel*>::iterator it = _channels.begin(); it != _channels.end(); ++it) {
+        if(it->second) {
+            std::cout << "Cleaning up channel " << it->first << std::endl;
+            delete it->second; // Delete channel object
+        }
+    }
+    _channels.clear();
+    
+    // Clear invite lists
+    _inviteList.clear();
+    
+    // Clear pollfd vector
+    _pollfd.clear();
+    
+    // Close server socket
+    if(_serverSocket != -1) {
+        std::cout << "Closing server socket " << _serverSocket << std::endl;
+        close(_serverSocket);
+        _serverSocket = -1;
+    }
+    
+    std::cout << "Server cleanup completed" << std::endl;
 }

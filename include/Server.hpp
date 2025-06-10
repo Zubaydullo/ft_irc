@@ -3,6 +3,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <algorithm>
+#include <sstream>
+#include <cstdlib>
 
 #include <sys/socket.h>
 #include <netinet/in.h>

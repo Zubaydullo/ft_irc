@@ -158,8 +158,8 @@ void Client::processMessages() {
     std::string line;
     
     while (std::getline(iss, line)) {
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
+        if (!line.empty() && line[line.length() - 1] == '\r') {
+            line.erase(line.length() - 1);
         }
         
         if (!line.empty()) {

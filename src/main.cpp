@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <stdexcept>
+#include <cstdlib>
 
 int main(int argc, char* argv[]) {
     if (argc != 3) {
@@ -13,7 +14,7 @@ int main(int argc, char* argv[]) {
         // Convert port to integer
         int port;
         try {
-            port = std::stoi(argv[1]);
+            port = atoi(argv[1]);
             if (port < 1024 || port > 65535) {
                 throw std::invalid_argument("Port must be between 1024 and 65535");
             }
