@@ -97,18 +97,24 @@ std::map<int,Client*>& Server::getClients() {
 } 
 
 void Server::handleDCC(int clientFd, std::istringstream& iss) {
+    std::cout << "\n=== DCC DEBUG START ===" << std::endl;
+    
     std::string line;
     std::getline(iss, line);
+    std::cout << "DCC Raw input line: '" << line << "'" << std::endl;
     
     size_t dcc_pos = line.find("DCC SEND");
     if (dcc_pos == std::string::npos) {
+        std::cout << "DCC ERROR: No 'DCC SEND' found in line" << std::endl;
         sendToClient(clientFd, "421 " + _Client[clientFd]->getNickname() + " DCC :Invalid DCC message format");
         return;
     }
+    std::cout << "DCC SEND found at position: " << dcc_pos << std::endl;
     
     std::istringstream dccStream(line);
     std::string target;
     dccStream >> target;
+    std::cout << "DCC Target: '" << target << "'" << std::endl;
     
     std::string dccContent;
     std::getline(dccStream, dccContent);
@@ -116,24 +122,38 @@ void Server::handleDCC(int clientFd, std::istringstream& iss) {
     std::string dummy1, dummy2, filename, ip_str, port_str, size_str;
     dccParams >> dummy1 >> dummy2 >> filename >> ip_str >> port_str >> size_str;
     
+    std::cout << "DCC Parsed:" << std::endl;
+    std::cout << "  Filename: '" << filename << "'" << std::endl;
+    std::cout << "  IP: '" << ip_str << "'" << std::endl;
+    std::cout << "  Port: '" << port_str << "'" << std::endl;
+    std::cout << "  Size: '" << size_str << "'" << std::endl;
+    
     std::string senderNick = _Client[clientFd]->getNickname();
     std::string senderUser = _Client[clientFd]->getUsername();
-    std::string senderIP = _Client[clientFd]->getClientIP(); 
-    std::string dccMessage = "\001DCC SEND " + filename + " " + ip_str + " " + port_str + " " + size_str + "\001";
+    std::string senderIP = _Client[clientFd]->getClientIP();
     
+    std::cout << "Sender Info:" << std::endl;
+    std::cout << "  Nick: '" << senderNick << "'" << std::endl;
+    std::cout << "  User: '" << senderUser << "'" << std::endl;
+    std::cout << "  IP: '" << senderIP << "'" << std::endl;
+    
+    std::string dccMessage = "\001DCC SEND " + filename + " " + ip_str + " " + port_str + " " + size_str + "\001";
     std::string ctcpMessage = ":" + senderNick + "!~" + senderUser + "@" + senderIP + 
                              " PRIVMSG " + target + " :" + dccMessage;
     
+    std::cout << "Final CTCP message: '" << ctcpMessage << "'" << std::endl;
+    
     int targetFd = findClientByNick(target);
     if (targetFd == -1) {
+        std::cout << "DCC ERROR: Target '" << target << "' not found" << std::endl;
         sendToClient(clientFd, "401 " + senderNick + " " + target + " :No such nick");
         return;
     }
+    std::cout << "Target FD found: " << targetFd << std::endl;
     
     sendToClient(targetFd, ctcpMessage);
-    
-    std::cout << "DCC: Relayed DCC SEND request from " << senderNick << " to " << target 
-              << " for file: " << filename << std::endl;
+    std::cout << "DCC message sent to target FD: " << targetFd << std::endl;
     
     sendToClient(clientFd, ":Server NOTICE " + senderNick + " :DCC request sent to " + target);
+    std::cout << "=== DCC DEBUG END ===\n" << std::endl;
 }
