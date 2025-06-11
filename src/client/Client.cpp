@@ -5,11 +5,8 @@ Client::Client(int fd) : sockfd(fd), connected(true) {
     nickname = "";
     username = "";
     realname = "";
-
-    //NOTE: Haithem add them --/
     authenticated = false;
     registered = false;
-    //NOTE: Haithem add them ---/
 }
 
 // Constructor for client-side connection
@@ -18,6 +15,8 @@ Client::Client(const std::string& server, int port)
     nickname = "";
     username = "";
     realname = "";
+    authenticated = false;
+    registered = false;
     createSocket();
 }
 
@@ -54,8 +53,6 @@ bool Client::connectToServer() {
     std::memcpy(&server_addr.sin_addr.s_addr, host_entry->h_addr, host_entry->h_length);
 
     // Connect to server
-    // we need to cast the server_addr to a sockaddr*
-    // why? because the connect function expects a sockaddr*
     if (::connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         std::cerr << "Error: Failed to connect to server" << std::endl;
         return false;
@@ -63,6 +60,7 @@ bool Client::connectToServer() {
 
     return true;
 }
+
 std::string Client::getClientIP() const {
     struct sockaddr_in addr;
     socklen_t addr_len = sizeof(addr);
@@ -71,11 +69,10 @@ std::string Client::getClientIP() const {
     }
     return "127.0.0.1";  
 }
+
 void Client::setClientIP(const std::string& ip) {
     clientIP = ip;
 }
-
-
 
 void Client::addToOutBuffer(const std::string& msg) {
     _outBuffer += msg;
@@ -84,6 +81,7 @@ void Client::addToOutBuffer(const std::string& msg) {
 std::string& Client::getOutBuffer() {
     return _outBuffer;
 }
+
 bool Client::connect() {
     if (!createSocket()) {
         return false;
@@ -101,7 +99,6 @@ bool Client::connect() {
 
 void Client::disconnect() {
     if (connected) {
-        quit("Client disconnecting");
         close(sockfd);
         connected = false;
         std::cout << "Disconnected from server" << std::endl;
@@ -112,7 +109,7 @@ bool Client::isConnected() const {
     return connected;
 }
 
-void Client::setNickname(const std::string& nick){
+void Client::setNickname(const std::string& nick) {
     nickname = nick;
 }
 
@@ -189,54 +186,55 @@ void Client::processMessages() {
 }
 
 void Client::parseMessage(const std::string& message) {
-    displayMessage(message);
+    std::cout << "<< " << message << std::endl;
     
     // Handle PING messages
     if (message.substr(0, 4) == "PING") {
         size_t pos = message.find(':');
         if (pos != std::string::npos) {
             std::string server_name = message.substr(pos + 1);
-            pong(server_name);
+            sendRaw("PONG :" + server_name);
         }
     }
 }
 
-std::vector<std::string> Client::split(const std::string& str, char delimiter) {
-    std::vector<std::string> tokens;
-    std::stringstream ss(str);
-    std::string token;
-    
-    while (std::getline(ss, token, delimiter)) {
-        tokens.push_back(token);
-    }
-    
-    return tokens;
+// Getter and setter implementations
+int Client::getFd() const {
+    return sockfd;
 }
 
-void Client::join(const std::string& channel) {
-    sendRaw("JOIN " + channel);
+bool Client::isAuthenticated() const {
+    return authenticated;
 }
 
-void Client::part(const std::string& channel) {
-    sendRaw("PART " + channel);
+bool Client::isRegistered() const {
+    return registered;
 }
 
-void Client::privmsg(const std::string& target, const std::string& message) {
-    sendRaw("PRIVMSG " + target + " :" + message);
+void Client::setAuthenticated(bool auth) {
+    authenticated = auth;
 }
 
-void Client::quit(const std::string& message) {
-    sendRaw("QUIT :" + message);
+void Client::setRegistered(bool reg) {
+    registered = reg;
 }
 
-void Client::pong(const std::string& server) {
-    sendRaw("PONG :" + server);
+std::string Client::getNickname() {
+    return nickname;
 }
 
-void Client::handlePing(const std::string& server) {
-    pong(server);
+std::string Client::getUsername() {
+    return username;
 }
 
-void Client::displayMessage(const std::string& message) {
-    std::cout << "<< " << message << std::endl;
+std::string Client::getRealname() {
+    return realname;
+}
+
+void Client::addToInBuffer(const std::string& data) {
+    _inBuffer += data;
+}
+
+std::string& Client::getInBuffer() {
+    return _inBuffer;
 }

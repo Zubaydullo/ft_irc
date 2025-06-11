@@ -23,16 +23,14 @@ private:
     std::string clientIP;     
     std::string _outBuffer;
     bool connected;
-    //NOTE: haithem  add modificatin  ------------/
     std::string _inBuffer;
     bool authenticated; 
     bool registered;
-    //NOTE: haithem modification end ------/
+    
     // Private methods
     bool createSocket();
     bool connectToServer();
     void parseMessage(const std::string& message);
-    std::vector<std::string> split(const std::string& str, char delimiter);
 
 public:
     // Constructors & Destructor
@@ -56,32 +54,21 @@ public:
     std::string receiveMessage();
     void processMessages();
 
-    // IRC Commands
-    void join(const std::string& channel);
-    void part(const std::string& channel);
-    void privmsg(const std::string& target, const std::string& message);
-    void quit(const std::string& message = "Goodbye");
-    void pong(const std::string& server);
-
-    // Utility methods
-    void handlePing(const std::string& server);
-    void displayMessage(const std::string& message);
-    //NOTE: haithem public add On //
+    // Getters and setters for server use
     std::string getClientIP() const;
-    int getFd() const { return sockfd; }
-    bool isAuthenticated() const { return authenticated; }
-    bool isRegistered() const { return registered; }
-    void setAuthenticated(bool auth) { authenticated = auth; }
-    void setRegistered(bool reg) { registered = reg; }
-    std::string  getNickname() { return nickname;}
-    std::string  getUsername() { return username;}
-    std::string  getRealname() { return realname;}
-    void addToInBuffer(const std::string& data) { _inBuffer += data; }
-    std::string& getInBuffer() { return _inBuffer; }
+    int getFd() const;
+    bool isAuthenticated() const;
+    bool isRegistered() const;
+    void setAuthenticated(bool auth);
+    void setRegistered(bool reg);
+    std::string getNickname();
+    std::string getUsername();
+    std::string getRealname();
+    void addToInBuffer(const std::string& data);
+    std::string& getInBuffer();
     void setClientIP(const std::string& ip);     
     void addToOutBuffer(const std::string& msg);   
     std::string& getOutBuffer();
-    //NOTE: haithem finish public add on //
 };
 
 #endif
