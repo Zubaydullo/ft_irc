@@ -37,6 +37,7 @@ void Server::parseCommand(int clientFd, const std::string& message){
         sendToClient(clientFd, "PONG :" + token);
     } else if (command == "QUIT") {
         removeClient(clientFd);
+        return;
     } else if (command == "CAP") {
         // Handle capability negotiation - common in modern clients
         std::string subcommand;

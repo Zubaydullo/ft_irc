@@ -44,6 +44,12 @@ void Server::Start(){
 void Server::removeClient(int ClinetFd){
     
     std::cout << "Removing client " << ClinetFd << std::endl;
+    
+    // Check if client exists before proceeding
+    if(_Client.find(ClinetFd) == _Client.end()) {
+        std::cout << "Client " << ClinetFd << " not found" << std::endl;
+        return;
+    }
          
     for(std::map<std::string, Channel*>::iterator channelIt = _channels.begin();
             channelIt != _channels.end(); ++channelIt) {
@@ -74,16 +80,21 @@ void Server::removeClient(int ClinetFd){
         }
     }
     
-    for(std::vector<struct pollfd>::iterator pollIt = _pollfd.begin(); pollIt != _pollfd.end(); ++pollIt ){
+    // Fix the iterator invalidation issue
+    for(std::vector<struct pollfd>::iterator pollIt = _pollfd.begin(); pollIt != _pollfd.end(); ){
         if(pollIt->fd == ClinetFd){
-            _pollfd.erase(pollIt);
-            delete _Client[ClinetFd];
-            _Client.erase(ClinetFd);
-            close(ClinetFd);
-            std::cout << "Client " << ClinetFd << " disconnected" << std::endl;
+            pollIt = _pollfd.erase(pollIt);  // erase returns next valid iterator
             break;
+        } else {
+            ++pollIt;
         }
     }
+    
+    // Clean up client resources
+    delete _Client[ClinetFd];
+    _Client.erase(ClinetFd);
+    close(ClinetFd);
+    std::cout << "Client " << ClinetFd << " disconnected" << std::endl;
 }
 void Server::handleClientData(int ClinetFd){
     char buffer[1024];
