@@ -65,6 +65,7 @@ public:
     void handlePing(const std::string& server);
     void displayMessage(const std::string& message);
     //NOTE: haithem public add On //
+    std::string getClientIP() const;
     int getFd() const { return sockfd; }
     bool isAuthenticated() const { return authenticated; }
     bool isRegistered() const { return registered; }

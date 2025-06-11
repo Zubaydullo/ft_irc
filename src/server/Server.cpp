@@ -118,8 +118,7 @@ void Server::handleDCC(int clientFd, std::istringstream& iss) {
     
     std::string senderNick = _Client[clientFd]->getNickname();
     std::string senderUser = _Client[clientFd]->getUsername();
-    std::string senderIP = "10.18.200.133"; // You might want to get real IP
-    
+    std::string senderIP = _Client[clientFd]->getClientIP(); 
     std::string dccMessage = "\001DCC SEND " + filename + " " + ip_str + " " + port_str + " " + size_str + "\001";
     
     std::string ctcpMessage = ":" + senderNick + "!~" + senderUser + "@" + senderIP + 

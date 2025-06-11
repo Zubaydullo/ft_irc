@@ -63,7 +63,14 @@ bool Client::connectToServer() {
 
     return true;
 }
-
+std::string Client::getClientIP() const {
+    struct sockaddr_in addr;
+    socklen_t addr_len = sizeof(addr);
+    if (getpeername(sockfd, (struct sockaddr*)&addr, &addr_len) == 0) {
+        return std::string(inet_ntoa(addr.sin_addr));
+    }
+    return "127.0.0.1";  
+}
 bool Client::connect() {
     if (!createSocket()) {
         return false;
