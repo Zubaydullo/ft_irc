@@ -160,7 +160,6 @@ void Server::handleClientData(int ClinetFd){
         if(completeMessage.length() > MAX_MESSAGE_LENGTH) {
             std::cerr << "Message too long from client " << ClinetFd << std::endl;
             sendToClient(ClinetFd, "ERROR :Message too long");
-            removeClient(ClinetFd);
             return;
         }
         
