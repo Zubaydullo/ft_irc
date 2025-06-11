@@ -16,6 +16,8 @@
 #include <unistd.h>
 #include "Client.hpp"
 #include "Channel.hpp"
+#include <signal.h>
+#include <cstdlib>
 #include <fstream>
 class Server { 
 
@@ -60,6 +62,16 @@ class Server {
         public: 
            void sendToClient(int clinetfd ,const  std::string& message);
             std::map<int, Client*>& getClients();
+        private: 
+         //NOTE:  this only for the leaks / signals handle
+            static Server* instance;  // For signal handler access
+            static void signalHandler(int signal);
+            void setupSignalHandlers();
+            void cleanupAllClients();
+            void cleanupAllChannels();
+            bool isValidClientFd(int clientFd);
+            bool isValidChannel(const std::string& channelName);
+            void gracefulShutdown();
 };
 
 

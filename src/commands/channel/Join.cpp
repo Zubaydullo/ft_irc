@@ -13,7 +13,8 @@ void Server::handleJoin(int clientFd , std::istringstream& iss){
 
         std::cout << "Client  " << clientFd << " Wants to jion channel: " << channelName << std::endl; 
     
-        if(_channels.find(channelName) == _channels.end()){  // if both equal to end channel don't exisiting 
+       if(!isValidChannel(channelName)){ // if both equal to end channel don't exisiting 
+                                         
         
          _channels[channelName] = new Channel(channelName);
          std::cout << "Created new channel : " << channelName << std::endl;

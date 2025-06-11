@@ -5,8 +5,7 @@ void Server::Start(){
     if(!createSocket()){
          throw std::runtime_error("Failed to create server Socket");
     }
-    //TODO: WE  need to add the conf of the i/o non-blockingi
-    // fcntl 
+    setupSignalHandlers();
     struct pollfd serverPoll;
     serverPoll.fd = _serverSocket;
     serverPoll.events = POLLIN;
@@ -20,7 +19,9 @@ void Server::Start(){
          
          int activity = poll(_pollfd.data(),_pollfd.size() , -1);
          if(activity == -1){
+             if(_running){ 
               std::cerr << "Poll Error" << std::endl;
+             }
                 break;
          }
          std::cout << "Activity detected " << activity << "socket(s)" << std::endl;
@@ -42,54 +43,57 @@ void Server::Start(){
 
 void Server::removeClient(int ClinetFd){
     
-    std::cout << "Revmoving client" << ClinetFd<<  std::endl;
+    std::cout << "Removing client " << ClinetFd << std::endl;
          
-    for(std::map<std::string , Channel*>::iterator channelIt = _channels.begin();
+    for(std::map<std::string, Channel*>::iterator channelIt = _channels.begin();
             channelIt != _channels.end(); ++channelIt) {
            
         if(channelIt->second->isMember(ClinetFd)){
-            std::string nick  = _Client[ClinetFd]->getNickname();
+            std::string nick = _Client[ClinetFd]->getNickname();
             std::string channelName = channelIt->first;
-
-        std::vector<int> members = channelIt->second->getMembers();
-        for(std::vector<int>::iterator  it = members.begin() ; it != members.begin(); ++it){
-             if(*it != ClinetFd){
-                 sendToClient(*it,":" + nick + " QUIT :Client disconnected");
-             }
+            
+            std::vector<int> members = channelIt->second->getMembers();
+            for(std::vector<int>::iterator it = members.begin(); it != members.end(); ++it){
+                if(*it != ClinetFd){
+                    sendToClient(*it, ":" + nick + " QUIT :Client disconnected");
+                }
+            }
+            
             channelIt->second->removeOperator(ClinetFd); 
             channelIt->second->removeMember(ClinetFd);
         }
+    }
+    
+    std::map<std::string, Channel*>::iterator it = _channels.begin(); 
+    while(it != _channels.end()){ 
+        if(it->second->getMemberCount() == 0){
+            delete it->second;
+            _channels.erase(it++);
+        }else{
+            ++it;
         }
     }
-    std::map<std::string, Channel*>::iterator it = _channels.begin(); 
-        while(it != _channels.end()){ 
-            if(it->second->getMemberCount() == 0){
-                 delete it->second;
-                 _channels.erase(it++);
-            }else{
-                 ++it;
-            }
-        }
-
+    
     for(std::vector<struct pollfd>::iterator pollIt = _pollfd.begin(); pollIt != _pollfd.end(); ++pollIt ){
         if(pollIt->fd == ClinetFd){
             _pollfd.erase(pollIt);
-            // delete the client from the map
             delete _Client[ClinetFd];
             _Client.erase(ClinetFd);
             close(ClinetFd);
             std::cout << "Client " << ClinetFd << " disconnected" << std::endl;
             break;
         }
-
     }
 }
-
 void Server::handleClientData(int ClinetFd){
     char buffer[1024];
     int bytesRead = recv(ClinetFd, buffer, sizeof(buffer) - 1, 0);
     if(bytesRead <= 0){
         removeClient(ClinetFd);
+        return;
+    }
+     if(!isValidClientFd(ClinetFd)) {
+        std::cerr << "Invalid client FD in handleClientData: " << ClinetFd << std::endl;
         return;
     }
     buffer[bytesRead] = '\0';

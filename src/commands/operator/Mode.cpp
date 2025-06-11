@@ -36,19 +36,23 @@ void Server::handleMode(int clientFd , std::istringstream& iss){
          }
          std::cout << nick << " gave operator status to " << param << " in " << target << std::endl;
     }else if(modeString == "-o"){
-         int targetFd = findClientByNick(param);
-               if(targetFd == -1){
-                    
-              sendToClient(clientFd, "401 " + nick + " " + param + " :No such nick");
-                    return ;
-               }
-
-        _channels[target]->removeOperator(clientFd);
-         std::vector<int> members = _channels[target]->getMembers();
-        for (std::vector<int>::iterator it = members.begin() ; it != members.end() ; ++it){ 
-            sendToClient(*it, ":" + nick + " MODE " + target + " -o " + param);
-        }
-  std::cout << nick << " removed operator status from " << param << " in " << target << std::endl;
+    int targetFd = findClientByNick(param);
+    if(targetFd == -1){
+        sendToClient(clientFd, "401 " + nick + " " + param + " :No such nick");
+        return ;
+    }
+    
+    if(!_channels[target]->isMember(targetFd)){
+        sendToClient(clientFd, "441 " + nick + " " + param + " " + target + " :They aren't on that channel"); 
+        return;
+    }
+    
+    _channels[target]->removeOperator(targetFd);  
+    std::vector<int> members = _channels[target]->getMembers();
+    for (std::vector<int>::iterator it = members.begin() ; it != members.end() ; ++it){ 
+        sendToClient(*it, ":" + nick + " MODE " + target + " -o " + param);
+    }
+    std::cout << nick << " removed operator status from " << param << " in " << target << std::endl;
     }else if (modeString == "+i") {
         _channels[target]->setInviteOnly(true);
         for (std::vector<int>::iterator it = members.begin(); it != members.end(); ++it) {

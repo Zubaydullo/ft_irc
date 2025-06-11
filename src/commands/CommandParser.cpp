@@ -78,8 +78,18 @@ int Server::findClientByNick(const std::string& nickname) {
     return -1;
 }
 
-void Server::sendToClient(int clientFd,const  std::string& message){
-    std::string msgWithCrLf = message + "\r\n";
-    send(clientFd, msgWithCrLf.c_str(), msgWithCrLf.length(), 0);
-    std::cout << "Sent to client " << clientFd << ": " << message << std::endl;
+void Server::sendToClient(int clientFd, const std::string& message){
+    if(!isValidClientFd(clientFd)) {
+        std::cerr << "Warning: Attempted to send to invalid client " << clientFd << std::endl;
+        return;
+    }
+    
+    std::string msg = message + "\r\n";
+    ssize_t sent = send(clientFd, msg.c_str(), msg.length(), 0);
+    if(sent < 0) {
+        std::cerr << "Error sending to client " << clientFd << std::endl;
+        removeClient(clientFd);   
+        return;
+    }
+    std::cout << "Sent to Client " << clientFd << ": " << message << std::endl; 
 }

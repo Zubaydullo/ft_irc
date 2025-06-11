@@ -33,6 +33,11 @@ void Server::handleKick(int clientFd , std::istringstream& iss){
     if(targetFd == -1 ){ 
         sendToClient(clientFd , "441 " + _Client[clientFd]->getNickname() 
                 + " " + targetNick + " " + channelName + "The aren't on the that channel" );
+        return;
+    }
+    if(!_channels[channelName]->isMember(targetFd)){
+    sendToClient(clientFd, "441 " + _Client[clientFd]->getNickname() + " " + targetNick + " " + channelName + " :They aren't on that channel");
+    return;
     }
     std::string kickerNick = _Client[clientFd]->getNickname(); 
     std::vector<int> members = _channels[channelName]->getMembers();
