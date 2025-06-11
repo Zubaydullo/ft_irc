@@ -4,7 +4,24 @@ void Server::handleJoin(int clientFd , std::istringstream& iss){
       
     std::string channelName,password;
     iss >> channelName >> password;
-       
+    
+    if (channelName.empty() || channelName[0] != '#') {
+        sendToClient(clientFd, "403 " + _Client[clientFd]->getNickname() + " " + channelName + " :Invalid channel name");
+        return;
+    }
+    if (channelName.length() > 50) {
+        sendToClient(clientFd, "403 " + _Client[clientFd]->getNickname() + " " + channelName + " :Channel name too long");
+        return;
+    }
+    if (channelName.find(' ') != std::string::npos) {
+        sendToClient(clientFd, "403 " + _Client[clientFd]->getNickname() + " " + channelName + " :Channel name cannot contain spaces");
+        return;
+    }
+    if (channelName.length() < 2 || channelName.find_first_not_of("#") == std::string::npos) {
+        sendToClient(clientFd, "403 " + _Client[clientFd]->getNickname() + " " + channelName + " :Invalid channel name");
+        return;
+    }
+
     if(!_Client[clientFd]->isRegistered()){
          
         sendToClient(clientFd , "451 :You have not registered");
