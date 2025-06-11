@@ -95,3 +95,46 @@ void Server::Stop() {
 std::map<int,Client*>& Server::getClients() { 
     return _Client;
 } 
+
+void Server::handleDCC(int clientFd, std::istringstream& iss) {
+    std::string line;
+    std::getline(iss, line);
+    
+    size_t dcc_pos = line.find("DCC SEND");
+    if (dcc_pos == std::string::npos) {
+        sendToClient(clientFd, "421 " + _Client[clientFd]->getNickname() + " DCC :Invalid DCC message format");
+        return;
+    }
+    
+    std::istringstream dccStream(line);
+    std::string target;
+    dccStream >> target;
+    
+    std::string dccContent;
+    std::getline(dccStream, dccContent);
+    std::istringstream dccParams(line.substr(dcc_pos));
+    std::string dummy1, dummy2, filename, ip_str, port_str, size_str;
+    dccParams >> dummy1 >> dummy2 >> filename >> ip_str >> port_str >> size_str;
+    
+    std::string senderNick = _Client[clientFd]->getNickname();
+    std::string senderUser = _Client[clientFd]->getUsername();
+    std::string senderIP = "10.18.200.133"; // You might want to get real IP
+    
+    std::string dccMessage = "\001DCC SEND " + filename + " " + ip_str + " " + port_str + " " + size_str + "\001";
+    
+    std::string ctcpMessage = ":" + senderNick + "!~" + senderUser + "@" + senderIP + 
+                             " PRIVMSG " + target + " :" + dccMessage;
+    
+    int targetFd = findClientByNick(target);
+    if (targetFd == -1) {
+        sendToClient(clientFd, "401 " + senderNick + " " + target + " :No such nick");
+        return;
+    }
+    
+    sendToClient(targetFd, ctcpMessage);
+    
+    std::cout << "DCC: Relayed DCC SEND request from " << senderNick << " to " << target 
+              << " for file: " << filename << std::endl;
+    
+    sendToClient(clientFd, ":Server NOTICE " + senderNick + " :DCC request sent to " + target);
+}

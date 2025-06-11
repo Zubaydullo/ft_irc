@@ -15,9 +15,6 @@ BASIC_CMD_DIR = $(COMMANDS_DIR)/basic
 CHANNEL_CMD_DIR = $(COMMANDS_DIR)/channel
 MESSAGING_CMD_DIR = $(COMMANDS_DIR)/messaging
 OPERATOR_CMD_DIR = $(COMMANDS_DIR)/operator
-BONUS_CMD_DIR = $(COMMANDS_DIR)/bonus
-UTILS_DIR = $(SRC_DIR)/utils
-DCC_DIR = $(SRC_DIR)/dcc
 
 # Source files
 SRC = $(SRC_DIR)/main.cpp \
@@ -40,11 +37,6 @@ SRC = $(SRC_DIR)/main.cpp \
       $(CHANNEL_CMD_DIR)/Kick.cpp \
       $(MESSAGING_CMD_DIR)/Privmsg.cpp \
       $(OPERATOR_CMD_DIR)/Mode.cpp \
-      $(BONUS_CMD_DIR)/Who.cpp \
-      $(BONUS_CMD_DIR)/Whois.cpp \
-      $(BONUS_CMD_DIR)/Away.cpp \
-      $(BONUS_CMD_DIR)/FileTransfer.cpp \
-      $(DCC_DIR)/Dcc.cpp
 
 # Object files
 OBJ_DIR = obj
@@ -59,9 +51,7 @@ $(shell mkdir -p $(OBJ_DIR) \
     $(OBJ_DIR)/commands/channel \
     $(OBJ_DIR)/commands/messaging \
     $(OBJ_DIR)/commands/operator \
-    $(OBJ_DIR)/commands/bonus \
-    $(OBJ_DIR)/utils \
-    $(OBJ_DIR)/dcc)
+    $(OBJ_DIR)/utils)
 
 # Main target
 all: $(NAME)
