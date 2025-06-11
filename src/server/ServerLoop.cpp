@@ -103,25 +103,66 @@ void Server::handleClientData(int ClinetFd){
         removeClient(ClinetFd);
         return;
     }
-     if(!isValidClientFd(ClinetFd)) {
+    
+    if(!isValidClientFd(ClinetFd)) {
         std::cerr << "Invalid client FD in handleClientData: " << ClinetFd << std::endl;
         return;
     }
+    
+    // Null-terminate the buffer
     buffer[bytesRead] = '\0';
-    std::string newData(buffer);
+    
+    // Validate input - reject non-printable characters except \r and \n
+    for(int i = 0; i < bytesRead; i++) {
+        unsigned char c = buffer[i];
+        if(c < 32 && c != '\r' && c != '\n') {
+            // Replace dangerous characters with spaces or just ignore
+            buffer[i] = ' ';
+        }
+        // Also handle potential null bytes in the middle
+        if(c == 0) {
+            std::cerr << "Warning: Null byte detected from client " << ClinetFd << std::endl;
+            removeClient(ClinetFd);
+            return;
+        }
+    }
+    
+    std::string newData(buffer, bytesRead);  // Use explicit length to handle any remaining issues
+    
+    // Check buffer size limit to prevent memory exhaustion
+    std::string &inBuffer = _Client[ClinetFd]->getInBuffer();
+    const size_t MAX_BUFFER_SIZE = 8192;  // 8KB limit per client
+    
+    if(inBuffer.length() + newData.length() > MAX_BUFFER_SIZE) {
+        std::cerr << "Buffer overflow protection: Client " << ClinetFd << " exceeded buffer limit" << std::endl;
+        sendToClient(ClinetFd, "ERROR :Input buffer overflow");
+        removeClient(ClinetFd);
+        return;
+    }
     
     // Add to client's input buffer for partial message handling
     _Client[ClinetFd]->addToInBuffer(newData);
     
     // Process complete messages (ending with \r\n or \n)
-    std::string &inBuffer = _Client[ClinetFd]->getInBuffer();
     size_t pos = 0;
+    int messageCount = 0;
+    const int MAX_MESSAGES_PER_CALL = 10;  // Prevent infinite loop
     
     // Look for complete messages ending with \r\n or \n
-    while ((pos = inBuffer.find("\r\n")) != std::string::npos || 
-           (pos = inBuffer.find("\n")) != std::string::npos) {
+    while (messageCount < MAX_MESSAGES_PER_CALL && 
+           ((pos = inBuffer.find("\r\n")) != std::string::npos || 
+            (pos = inBuffer.find("\n")) != std::string::npos)) {
         
         std::string completeMessage = inBuffer.substr(0, pos);
+        
+        // Validate message length
+        const size_t MAX_MESSAGE_LENGTH = 512;  // IRC standard
+        if(completeMessage.length() > MAX_MESSAGE_LENGTH) {
+            std::cerr << "Message too long from client " << ClinetFd << std::endl;
+            sendToClient(ClinetFd, "ERROR :Message too long");
+            removeClient(ClinetFd);
+            return;
+        }
         
         // Remove the processed message from buffer
         if (pos < inBuffer.length() - 1 && inBuffer.substr(pos, 2) == "\r\n") {
@@ -131,11 +172,34 @@ void Server::handleClientData(int ClinetFd){
         }
         
         if (!completeMessage.empty()) {
-            // Clean up the message
+            // Clean up the message - only replace \r with space, don't modify other chars
             std::replace(completeMessage.begin(), completeMessage.end(), '\r', ' ');
             
             std::cout << "Received From Client " << ClinetFd << ": " << completeMessage << std::endl;
-            parseCommand(ClinetFd, completeMessage);
+            
+            // Add try-catch to prevent parseCommand from crashing the server
+            try {
+                parseCommand(ClinetFd, completeMessage);
+            } catch (const std::exception& e) {
+                std::cerr << "Error parsing command from client " << ClinetFd << ": " << e.what() << std::endl;
+                sendToClient(ClinetFd, "ERROR :Command parsing error");
+                removeClient(ClinetFd);
+                return;
+            } catch (...) {
+                std::cerr << "Unknown error parsing command from client " << ClinetFd << std::endl;
+                sendToClient(ClinetFd, "ERROR :Unknown parsing error");
+                removeClient(ClinetFd);
+                return;
+            }
         }
+        messageCount++;
+    }
+    
+    // If we hit the message limit, there might be a flood attack
+    if(messageCount >= MAX_MESSAGES_PER_CALL) {
+        std::cerr << "Message flood detected from client " << ClinetFd << std::endl;
+        sendToClient(ClinetFd, "ERROR :Message flood detected");
+        removeClient(ClinetFd);
+        return;
     }
 }

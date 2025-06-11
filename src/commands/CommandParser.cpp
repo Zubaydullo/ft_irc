@@ -1,11 +1,39 @@
 #include "../../include/Server.hpp"
 
 void Server::parseCommand(int clientFd, const std::string& message){
+    // Validate client exists
+    if(!isValidClientFd(clientFd)) {
+        std::cerr << "parseCommand: Invalid client FD " << clientFd << std::endl;
+        return;
+    }
+    
+    // Validate message is not empty and not too long
+    if(message.empty()) {
+        return;  // Ignore empty messages
+    }
+    
+    if(message.length() > 512) {  // IRC standard max message length
+        std::cerr << "parseCommand: Message too long from client " << clientFd << std::endl;
+        sendToClient(clientFd, "ERROR :Message too long");
+        return;
+    }
+    
     std::cout << "Parse Command : " << message << std::endl;
   
     std::istringstream iss(message);
     std::string command;
-    iss >> command;
+    
+    // Safe command extraction
+    if(!(iss >> command)) {
+        // Failed to extract command
+        return;
+    }
+    
+    // Validate command is reasonable
+    if(command.length() > 32) {  // No IRC command should be this long
+        sendToClient(clientFd, "421 " + _Client[clientFd]->getNickname() + " " + command + " :Unknown command");
+        return;
+    }
     
     std::transform(command.begin(), command.end(), command.begin(), ::toupper);
     
@@ -50,8 +78,16 @@ void Server::parseCommand(int clientFd, const std::string& message){
     } else if (command.find("DCC") != std::string::npos) {
         handleDCC(clientFd, iss);
     } else {
-        sendToClient(clientFd, "421 " + _Client[clientFd]->getNickname() + " " + command + " :Unknown command");
+        // Check if client exists before trying to get nickname
+        if(_Client.find(clientFd) != _Client.end() && _Client[clientFd]) {
+            sendToClient(clientFd, "421 " + _Client[clientFd]->getNickname() + " " + command + " :Unknown command");
+        }
         std::cout << "Unknown command: " << command << std::endl;
+    }
+
+    // Check if client still exists before registration check
+    if(!isValidClientFd(clientFd)) {
+        return;  // Client was removed during command processing
     }
 
     // Check if client should be registered after processing commands
