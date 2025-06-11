@@ -20,6 +20,8 @@ private:
     std::string nickname;
     std::string username;
     std::string realname;
+    std::string clientIP;     
+    std::string _outBuffer;
     bool connected;
     //NOTE: haithem  add modificatin  ------------/
     std::string _inBuffer;
@@ -76,6 +78,9 @@ public:
     std::string  getRealname() { return realname;}
     void addToInBuffer(const std::string& data) { _inBuffer += data; }
     std::string& getInBuffer() { return _inBuffer; }
+    void setClientIP(const std::string& ip);     
+    void addToOutBuffer(const std::string& msg);   
+    std::string& getOutBuffer();
     //NOTE: haithem finish public add on //
 };
 

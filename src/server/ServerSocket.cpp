@@ -41,20 +41,24 @@ bool Server::createSocket(){
 }
 
 void Server::acceptNewClient(){
-     
-        struct sockaddr_in ClientAddr;
-        socklen_t  ClientLen = sizeof(ClientAddr);
-        int ClientFd =  accept(_serverSocket, (struct sockaddr*)&ClientAddr, &ClientLen);
-
-         if(ClientFd == -1) {
-              std::cerr <<  "Error : Accept did  work with  client"  << std::endl;
-                return;
-         }
-         std::cout << "New Client Connected! FD:  " << ClientFd << std::endl;
-         
-         struct pollfd ClientPoll;
-         ClientPoll.fd = ClientFd;
-         ClientPoll.events = POLLIN;
-        _pollfd.push_back(ClientPoll);
-       _Client[ClientFd] = new Client(ClientFd); 
+    struct sockaddr_in ClientAddr;
+    socklen_t  ClientLen = sizeof(ClientAddr);
+    int ClientFd =  accept(_serverSocket, (struct sockaddr*)&ClientAddr, &ClientLen);
+    
+    if(ClientFd == -1) {
+        std::cerr <<  "Error : Accept did  work with  client"  << std::endl;
+        return;
+    }
+    std::cout << "New Client Connected! FD:  " << ClientFd << std::endl;
+    
+    struct pollfd ClientPoll;
+    ClientPoll.fd = ClientFd;
+    ClientPoll.events = POLLIN;
+    _pollfd.push_back(ClientPoll);
+    _Client[ClientFd] = new Client(ClientFd); 
+    
+    // ADD THESE 3 LINES:
+    std::string clientIP = inet_ntoa(ClientAddr.sin_addr);
+    _Client[ClientFd]->setClientIP(clientIP);
+    std::cout << "Client IP set to: " << clientIP << std::endl;
 }

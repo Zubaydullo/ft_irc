@@ -71,6 +71,19 @@ std::string Client::getClientIP() const {
     }
     return "127.0.0.1";  
 }
+void Client::setClientIP(const std::string& ip) {
+    clientIP = ip;
+}
+
+
+
+void Client::addToOutBuffer(const std::string& msg) {
+    _outBuffer += msg;
+}
+
+std::string& Client::getOutBuffer() {
+    return _outBuffer;
+}
 bool Client::connect() {
     if (!createSocket()) {
         return false;
