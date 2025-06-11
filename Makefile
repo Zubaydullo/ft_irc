@@ -17,48 +17,34 @@ MESSAGING_CMD_DIR = $(COMMANDS_DIR)/messaging
 OPERATOR_CMD_DIR = $(COMMANDS_DIR)/operator
 BONUS_CMD_DIR = $(COMMANDS_DIR)/bonus
 UTILS_DIR = $(SRC_DIR)/utils
-MESSAGE_DIR = $(SRC_DIR)/message
+DCC_DIR = $(SRC_DIR)/dcc
 
 # Source files
 SRC = $(SRC_DIR)/main.cpp \
       $(SERVER_DIR)/Server.cpp \
-      $(SERVER_DIR)/ServerInit.cpp \
       $(SERVER_DIR)/ServerSocket.cpp \
       $(SERVER_DIR)/ServerLoop.cpp \
       $(CLIENT_DIR)/Client.cpp \
-      $(CLIENT_DIR)/ClientAuth.cpp \
-      $(CLIENT_DIR)/ClientBuffer.cpp \
       $(CHANNEL_DIR)/Channel.cpp \
-      $(CHANNEL_DIR)/ChannelModes.cpp \
-      $(CHANNEL_DIR)/ChannelOperations.cpp \
       $(COMMANDS_DIR)/Command.cpp \
       $(COMMANDS_DIR)/CommandParser.cpp \
       $(BASIC_CMD_DIR)/Nick.cpp \
       $(BASIC_CMD_DIR)/User.cpp \
       $(BASIC_CMD_DIR)/Pass.cpp \
       $(BASIC_CMD_DIR)/Quit.cpp \
-      $(BASIC_CMD_DIR)/Ping.cpp \
       $(CHANNEL_CMD_DIR)/Join.cpp \
       $(CHANNEL_CMD_DIR)/Part.cpp \
       $(CHANNEL_CMD_DIR)/Topic.cpp \
       $(CHANNEL_CMD_DIR)/Names.cpp \
-      $(CHANNEL_CMD_DIR)/List.cpp \
       $(CHANNEL_CMD_DIR)/Invite.cpp \
       $(CHANNEL_CMD_DIR)/Kick.cpp \
       $(MESSAGING_CMD_DIR)/Privmsg.cpp \
-      $(MESSAGING_CMD_DIR)/Notice.cpp \
       $(OPERATOR_CMD_DIR)/Mode.cpp \
-      $(OPERATOR_CMD_DIR)/Oper.cpp \
       $(BONUS_CMD_DIR)/Who.cpp \
       $(BONUS_CMD_DIR)/Whois.cpp \
       $(BONUS_CMD_DIR)/Away.cpp \
       $(BONUS_CMD_DIR)/FileTransfer.cpp \
-      $(UTILS_DIR)/Utils.cpp \
-      $(UTILS_DIR)/Logger.cpp \
-      $(UTILS_DIR)/Config.cpp \
-      $(UTILS_DIR)/Validation.cpp \
-      $(MESSAGE_DIR)/Message.cpp \
-      $(MESSAGE_DIR)/MessageBuffer.cpp
+      $(DCC_DIR)/Dcc.cpp
 
 # Object files
 OBJ_DIR = obj
@@ -75,7 +61,7 @@ $(shell mkdir -p $(OBJ_DIR) \
     $(OBJ_DIR)/commands/operator \
     $(OBJ_DIR)/commands/bonus \
     $(OBJ_DIR)/utils \
-    $(OBJ_DIR)/message)
+    $(OBJ_DIR)/dcc)
 
 # Main target
 all: $(NAME)

@@ -1,5 +1,5 @@
 #include "../../include/Dcc.hpp"
-#include "../../include/server.hpp"
+#include "../../include/Server.hpp"
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -9,8 +9,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-DCCManager::DCCManager(Server* server):_server() , _nextPort(8000){ 
-
+DCCManager::DCCManager(Server* server):_server(server) , _nextPort(8000){ 
     std::cout << "DCC Manager initialized. Port range starts at : " << _nextPort << std::endl; 
 }
 
@@ -85,7 +84,7 @@ int DCCManager::createLisentSocket(int port){
 
 void DCCManager::sendDCCOffer(const std::string& sender, const std::string& receiver, const DCCTransfer& transfer){ 
 
-        std:;std::ostringstream oss;
+        std::ostringstream oss;
             oss << "DCC SEND " << transfer.fileName << " " << transfer.ip << " " << transfer.port << " " << transfer.fileSize;
         std::string dccMessage = oss.str();
         std::string privmsgCmd = ":" + sender + " PRIVMSG "+ receiver + " :" + dccMessage;
@@ -114,6 +113,27 @@ DCCManager::~DCCManager(){
     }
     _activeTransfers.clear();
     std::cout << "DCC Manager destroyed. All transfers cleaned up." << std::endl;
+}
+
+void Server::handleDCC(int clientFd, std::istringstream& iss) {
+    std::string dccType, filename, ip, port, size;
+    iss >> dccType >> filename >> ip >> port >> size;
+    
+    std::cout << "DCC request from client " << clientFd << std::endl;
+    std::cout << "Type: " << dccType << ", File: " << filename << std::endl;
+    std::cout << "IP: " << ip << ", Port: " << port << ", Size: " << size << std::endl;
+    
+    // Basic DCC SEND handling - this is a simplified implementation
+    // In a full IRC server, you would need more sophisticated DCC handling
+    if (dccType == "SEND") {
+        // Forward the DCC request to the target client
+        std::string senderNick = _Client[clientFd]->getNickname();
+        std::string message = ":\001DCC SEND " + filename + " " + ip + " " + port + " " + size + "\001";
+        
+        std::cout << "Forwarding DCC SEND request: " << message << std::endl;
+        // Note: In a real implementation, you'd need to identify the target client
+        // and forward this message to them
+    }
 }
 
 
