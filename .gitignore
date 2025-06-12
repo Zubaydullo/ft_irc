@@ -1,0 +1,80 @@
+# Build directory
+obj/
+*.o
+*.a
+*.so
+*.dylib
+
+# Executable
+ircserv
+
+# Bot executable
+bot/ftbot
+bot/obj/
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS specific files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Logs
+logs/*
+!logs/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Dependencies
+node_modules/
+vendor/
+
+# Configuration files that might contain sensitive data
+config/*.conf
+!config/server.conf.example
+
+# Test coverage
+coverage/
+*.gcno
+*.gcda
+*.gcov
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
