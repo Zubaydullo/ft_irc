@@ -571,7 +571,7 @@ valgrind --leak-check=full ./ircserv 6667 testpass
 
 ### 🎉 Congratulations on completing ft_irc!
 
-**Made with ❤️ by [Your Name]**
+**Made with ❤️ by [Haithem (0xk4g3) & zabdirak & raouf]**
 
 *This project demonstrates advanced C++ programming, network protocols, and system programming concepts.*
 
