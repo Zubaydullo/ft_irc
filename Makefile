@@ -23,7 +23,6 @@ SRC = $(SRC_DIR)/main.cpp \
       $(SERVER_DIR)/ServerLoop.cpp \
       $(CLIENT_DIR)/Client.cpp \
       $(CHANNEL_DIR)/Channel.cpp \
-      $(COMMANDS_DIR)/Command.cpp \
       $(COMMANDS_DIR)/CommandParser.cpp \
       $(BASIC_CMD_DIR)/Nick.cpp \
       $(BASIC_CMD_DIR)/User.cpp \

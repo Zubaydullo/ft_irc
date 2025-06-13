@@ -115,18 +115,58 @@ int Server::findClientByNick(const std::string& nickname) {
     return -1;
 }
 
-void Server::sendToClient(int clientFd, const std::string& message){
-    if(!isValidClientFd(clientFd)) {
+
+void Server::sendToClient(int clientFd, const std::string& message) {
+    if (!isValidClientFd(clientFd)) {
         std::cerr << "Warning: Attempted to send to invalid client " << clientFd << std::endl;
         return;
     }
     
-    std::string msg = message + "\r\n";
-    ssize_t sent = send(clientFd, msg.c_str(), msg.length(), 0);
-    if(sent < 0) {
-        std::cerr << "Error sending to client " << clientFd << std::endl;
-        removeClient(clientFd);   
+    std::string fullMessage = message + "\r\n";
+    
+    struct pollfd pfd;
+    pfd.fd = clientFd;
+    pfd.events = POLLOUT;
+    pfd.revents = 0;
+    
+    int pollResult = poll(&pfd, 1, 0); 
+    
+    if (pollResult < 0) {
+        std::cerr << "Poll failed for client " << clientFd << ": " << strerror(errno) << std::endl;
+        removeClient(clientFd);
         return;
     }
-    std::cout << "Sent to Client " << clientFd << ": " << message << std::endl; 
+    
+    if (pollResult == 0 || !(pfd.revents & POLLOUT)) {
+        _Client[clientFd]->addToOutBuffer(fullMessage);
+        std::cout << "Buffered message for client " << clientFd << ": " << message << std::endl;
+        return;
+    }
+    
+    ssize_t bytesSent = send(clientFd, fullMessage.c_str(), fullMessage.length(), MSG_NOSIGNAL);
+    
+    if (bytesSent < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            _Client[clientFd]->addToOutBuffer(fullMessage);
+            std::cout << "Send would block for client " << clientFd << ", buffered message" << std::endl;
+            return;
+        }
+        std::cerr << "Send failed for client " << clientFd << ": " << strerror(errno) << std::endl;
+        removeClient(clientFd);
+        return;
+    }
+    
+    if (bytesSent == 0) {
+        std::cerr << "Send returned 0 for client " << clientFd << std::endl;
+        removeClient(clientFd);
+        return;
+    }
+    
+    if ((size_t)bytesSent < fullMessage.length()) {
+        std::string remaining = fullMessage.substr(bytesSent);
+        _Client[clientFd]->addToOutBuffer(remaining);
+        std::cout << "Partial send to client " << clientFd << ", buffered remaining " << remaining.length() << " bytes" << std::endl;
+    }
+    
+    std::cout << "Sent to Client " << clientFd << ": " << message << std::endl;
 }

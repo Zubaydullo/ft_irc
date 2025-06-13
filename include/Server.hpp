@@ -19,6 +19,10 @@
 #include <signal.h>
 #include <cstdlib>
 #include <fstream>
+#include <fcntl.h>
+#include <errno.h>
+#include <cstring>
+#include <arpa/inet.h>
 class Server { 
 
         private: 

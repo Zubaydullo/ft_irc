@@ -1,204 +1,181 @@
 #include "../../include/Server.hpp"
+// ===== TEMPORARY DEBUG VERSION - Replace your Start() method with this =====
 
-void Server::Start(){
-        
-    if(!createSocket()){
-         throw std::runtime_error("Failed to create server Socket");
+void Server::Start() {
+    if (!createSocket()) {
+        std::cerr << "Failed to create server socket" << std::endl;
+        return;
     }
+    
     setupSignalHandlers();
+    
+    // Add server socket to poll array
     struct pollfd serverPoll;
     serverPoll.fd = _serverSocket;
     serverPoll.events = POLLIN;
     serverPoll.revents = 0;
     _pollfd.push_back(serverPoll);
     
+    std::cout << "Server listening on port " << _port << std::endl;
     _running = true;
-    std::cout  << "Server Started successfully " << std::endl;
-   
-    while(_running){
-         
-         int activity = poll(_pollfd.data(),_pollfd.size() , -1);
-         if(activity == -1){
-             if(_running){ 
-              std::cerr << "Poll Error" << std::endl;
-             }
-                break;
-         }
-         std::cout << "Activity detected " << activity << "socket(s)" << std::endl;
-        for(size_t i = 0 ; i < _pollfd.size() ;  i++){
-             if(!(_pollfd[i].revents & POLLIN))
+    
+    while (_running) {
+        
+        int activity = poll(_pollfd.data(), _pollfd.size(), 1000);
+        
+        if (activity < 0) {
+            if (errno == EINTR) {
                 continue;
-
-            if(_pollfd[i].fd ==  _serverSocket){
-                std::cout << "New Client trying to connect !" <<std::endl;
-                 acceptNewClient();
-            }else {
-                std::cout << "Data from exisiting Client on fd" << std::endl;
-                handleClientData(_pollfd[i].fd);
             }
-            
+            std::cerr << "ERROR: Poll failed: " << strerror(errno) << std::endl;
+            break;
         }
-    }
-}
-
-void Server::removeClient(int ClinetFd){
-    
-    std::cout << "Removing client " << ClinetFd << std::endl;
-    
-    // Check if client exists before proceeding
-    if(_Client.find(ClinetFd) == _Client.end()) {
-        std::cout << "Client " << ClinetFd << " not found" << std::endl;
-        return;
-    }
-         
-    for(std::map<std::string, Channel*>::iterator channelIt = _channels.begin();
-            channelIt != _channels.end(); ++channelIt) {
-           
-        if(channelIt->second->isMember(ClinetFd)){
-            std::string nick = _Client[ClinetFd]->getNickname();
-            std::string channelName = channelIt->first;
-            
-            std::vector<int> members = channelIt->second->getMembers();
-            for(std::vector<int>::iterator it = members.begin(); it != members.end(); ++it){
-                if(*it != ClinetFd){
-                    sendToClient(*it, ":" + nick + " QUIT :Client disconnected");
+        
+        if (activity == 0) {
+            continue;
+        }
+        
+        
+        for (size_t i = 0; i < _pollfd.size(); ++i) {
+            if (_pollfd[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                if (_pollfd[i].fd == _serverSocket) {
+                    std::cerr << "ERROR: Server socket error" << std::endl;
+                    _running = false;
+                    break;
+                } else {
+                    removeClient(_pollfd[i].fd);
+                    continue;
                 }
             }
             
-            channelIt->second->removeOperator(ClinetFd); 
-            channelIt->second->removeMember(ClinetFd);
+            if (_pollfd[i].revents & POLLIN) {
+                if (_pollfd[i].fd == _serverSocket) {
+                    acceptNewClient();
+                } else {
+                    handleClientData(_pollfd[i].fd);
+                }
+            }
         }
+        
     }
     
-    std::map<std::string, Channel*>::iterator it = _channels.begin(); 
-    while(it != _channels.end()){ 
-        if(it->second->getMemberCount() == 0){
+    Stop();
+}
+
+void Server::removeClient(int clientFd) {
+    if (_Client.find(clientFd) == _Client.end()) {
+        std::cout << "removeClient: Client " << clientFd << " not found" << std::endl;
+        return;
+    }
+    
+    std::cout << "Removing client " << clientFd << std::endl;
+    
+    for (std::map<std::string, Channel*>::iterator it = _channels.begin(); 
+         it != _channels.end(); ) {
+        it->second->removeMember(clientFd);
+        
+        if (it->second->getMemberCount() == 0) {
+            std::cout << "Deleting empty channel: " << it->first << std::endl;
             delete it->second;
-            _channels.erase(it++);
-        }else{
+            std::map<std::string, Channel*>::iterator toErase = it;
+            ++it;
+            _channels.erase(toErase);
+        } else {
             ++it;
         }
     }
     
-    // Fix the iterator invalidation issue
-    for(std::vector<struct pollfd>::iterator pollIt = _pollfd.begin(); pollIt != _pollfd.end(); ){
-        if(pollIt->fd == ClinetFd){
-            pollIt = _pollfd.erase(pollIt);  // erase returns next valid iterator
+    for (std::map<std::string, std::vector<int> >::iterator it = _inviteList.begin();
+         it != _inviteList.end(); ++it) {
+        std::vector<int>& invites = it->second;
+        invites.erase(std::remove(invites.begin(), invites.end(), clientFd), invites.end());
+    }
+    
+    for (std::vector<struct pollfd>::iterator it = _pollfd.begin(); 
+         it != _pollfd.end(); ++it) {
+        if (it->fd == clientFd) {
+            std::cout << "Removing FD " << clientFd << " from poll array" << std::endl;
+            _pollfd.erase(it);
             break;
-        } else {
-            ++pollIt;
         }
     }
     
-    // Clean up client resources
-    delete _Client[ClinetFd];
-    _Client.erase(ClinetFd);
-    close(ClinetFd);
-    std::cout << "Client " << ClinetFd << " disconnected" << std::endl;
+    std::string disconnectMsg = "ERROR :Disconnected from server";
+    send(clientFd, (disconnectMsg + "\r\n").c_str(), disconnectMsg.length() + 2, MSG_NOSIGNAL);
+    
+    delete _Client[clientFd];
+    _Client.erase(clientFd);
+    
+    close(clientFd);
+    
+    std::cout << "Successfully removed client " << clientFd << std::endl;
 }
-void Server::handleClientData(int ClinetFd){
-    char buffer[1024];
-    int bytesRead = recv(ClinetFd, buffer, sizeof(buffer) - 1, 0);
-    if(bytesRead <= 0){
-        removeClient(ClinetFd);
+void Server::handleClientData(int clientFd) {
+    if (!isValidClientFd(clientFd)) {
+        std::cerr << "handleClientData: Invalid client FD " << clientFd << std::endl;
         return;
     }
     
-    if(!isValidClientFd(ClinetFd)) {
-        std::cerr << "Invalid client FD in handleClientData: " << ClinetFd << std::endl;
-        return;
-    }
+    char buffer[4096];
+    memset(buffer, 0, sizeof(buffer));
     
-    // Null-terminate the buffer
-    buffer[bytesRead] = '\0';
+    ssize_t bytesReceived = recv(clientFd, buffer, sizeof(buffer) - 1, 0);
     
-    // Validate input - reject non-printable characters except \r and \n
-    for(int i = 0; i < bytesRead; i++) {
-        unsigned char c = buffer[i];
-        if(c < 32 && c != '\r' && c != '\n') {
-            // Replace dangerous characters with spaces or just ignore
-            buffer[i] = ' ';
-        }
-        // Also handle potential null bytes in the middle
-        if(c == 0) {
-            std::cerr << "Warning: Null byte detected from client " << ClinetFd << std::endl;
-            removeClient(ClinetFd);
+    if (bytesReceived < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            std::cerr << "Warning: recv() returned EAGAIN after poll() indicated ready" << std::endl;
             return;
         }
-    }
-    
-    std::string newData(buffer, bytesRead);  // Use explicit length to handle any remaining issues
-    
-    // Check buffer size limit to prevent memory exhaustion
-    std::string &inBuffer = _Client[ClinetFd]->getInBuffer();
-    const size_t MAX_BUFFER_SIZE = 8192;  // 8KB limit per client
-    
-    if(inBuffer.length() + newData.length() > MAX_BUFFER_SIZE) {
-        std::cerr << "Buffer overflow protection: Client " << ClinetFd << " exceeded buffer limit" << std::endl;
-        sendToClient(ClinetFd, "ERROR :Input buffer overflow");
-        removeClient(ClinetFd);
+        std::cerr << "recv() failed for client " << clientFd << ": " << strerror(errno) << std::endl;
+        removeClient(clientFd);
         return;
     }
     
-    // Add to client's input buffer for partial message handling
-    _Client[ClinetFd]->addToInBuffer(newData);
+    if (bytesReceived == 0) {
+        std::cout << "Client " << clientFd << " disconnected" << std::endl;
+        removeClient(clientFd);
+        return;
+    }
     
-    // Process complete messages (ending with \r\n or \n)
-    size_t pos = 0;
-    int messageCount = 0;
-    const int MAX_MESSAGES_PER_CALL = 10;  // Prevent infinite loop
+    buffer[bytesReceived] = '\0';
+    _Client[clientFd]->addToInBuffer(std::string(buffer));
     
-    // Look for complete messages ending with \r\n or \n
-    while (messageCount < MAX_MESSAGES_PER_CALL && 
-           ((pos = inBuffer.find("\r\n")) != std::string::npos || 
-            (pos = inBuffer.find("\n")) != std::string::npos)) {
+    // Process complete messages - handle BOTH \r\n AND \n
+    std::string& inBuffer = _Client[clientFd]->getInBuffer();
+    size_t pos;
+    
+    // First try to find \r\n (proper IRC protocol)
+    while ((pos = inBuffer.find("\r\n")) != std::string::npos) {
+        std::string message = inBuffer.substr(0, pos);
+        inBuffer.erase(0, pos + 2);
         
-        std::string completeMessage = inBuffer.substr(0, pos);
-        
-        // Validate message length
-        const size_t MAX_MESSAGE_LENGTH = 512;  // IRC standard
-        if(completeMessage.length() > MAX_MESSAGE_LENGTH) {
-            std::cerr << "Message too long from client " << ClinetFd << std::endl;
-            sendToClient(ClinetFd, "ERROR :Message too long");
-            return;
-        }
-        
-        // Remove the processed message from buffer
-        if (pos < inBuffer.length() - 1 && inBuffer.substr(pos, 2) == "\r\n") {
-            inBuffer.erase(0, pos + 2);
-        } else {
-            inBuffer.erase(0, pos + 1);
-        }
-        
-        if (!completeMessage.empty()) {
-            // Clean up the message - only replace \r with space, don't modify other chars
-            std::replace(completeMessage.begin(), completeMessage.end(), '\r', ' ');
+        if (!message.empty()) {
+            std::cout << "Received from client " << clientFd << ": " << message << std::endl;
+            parseCommand(clientFd, message);
             
-            std::cout << "Received From Client " << ClinetFd << ": " << completeMessage << std::endl;
-            
-            // Add try-catch to prevent parseCommand from crashing the server
-            try {
-                parseCommand(ClinetFd, completeMessage);
-            } catch (const std::exception& e) {
-                std::cerr << "Error parsing command from client " << ClinetFd << ": " << e.what() << std::endl;
-                sendToClient(ClinetFd, "ERROR :Command parsing error");
-                removeClient(ClinetFd);
-                return;
-            } catch (...) {
-                std::cerr << "Unknown error parsing command from client " << ClinetFd << std::endl;
-                sendToClient(ClinetFd, "ERROR :Unknown parsing error");
-                removeClient(ClinetFd);
+            if (!isValidClientFd(clientFd)) {
                 return;
             }
         }
-        messageCount++;
     }
     
-    // If we hit the message limit, there might be a flood attack
-    if(messageCount >= MAX_MESSAGES_PER_CALL) {
-        std::cerr << "Message flood detected from client " << ClinetFd << std::endl;
-        sendToClient(ClinetFd, "ERROR :Message flood detected");
-        removeClient(ClinetFd);
-        return;
+    // If no \r\n found, try \n (for netcat compatibility)
+    while ((pos = inBuffer.find("\n")) != std::string::npos) {
+        std::string message = inBuffer.substr(0, pos);
+        inBuffer.erase(0, pos + 1);
+        
+        // Remove any trailing \r if present
+        if (!message.empty() && message[message.length() - 1] == '\r') {
+            message.erase(message.length() - 1);
+        }
+        
+        if (!message.empty()) {
+            std::cout << "Received from client " << clientFd << ": " << message << std::endl;
+            parseCommand(clientFd, message);
+            
+            if (!isValidClientFd(clientFd)) {
+                return;
+            }
+        }
     }
 }
