@@ -1,5 +1,4 @@
 #include "../../include/Server.hpp"
-// ===== TEMPORARY DEBUG VERSION - Replace your Start() method with this =====
 
 void Server::Start() {
     if (!createSocket()) {
@@ -9,7 +8,6 @@ void Server::Start() {
     
     setupSignalHandlers();
     
-    // Add server socket to poll array
     struct pollfd serverPoll;
     serverPoll.fd = _serverSocket;
     serverPoll.events = POLLIN;
@@ -140,11 +138,9 @@ void Server::handleClientData(int clientFd) {
     buffer[bytesReceived] = '\0';
     _Client[clientFd]->addToInBuffer(std::string(buffer));
     
-    // Process complete messages - handle BOTH \r\n AND \n
     std::string& inBuffer = _Client[clientFd]->getInBuffer();
     size_t pos;
     
-    // First try to find \r\n (proper IRC protocol)
     while ((pos = inBuffer.find("\r\n")) != std::string::npos) {
         std::string message = inBuffer.substr(0, pos);
         inBuffer.erase(0, pos + 2);
@@ -159,12 +155,10 @@ void Server::handleClientData(int clientFd) {
         }
     }
     
-    // If no \r\n found, try \n (for netcat compatibility)
     while ((pos = inBuffer.find("\n")) != std::string::npos) {
         std::string message = inBuffer.substr(0, pos);
         inBuffer.erase(0, pos + 1);
         
-        // Remove any trailing \r if present
         if (!message.empty() && message[message.length() - 1] == '\r') {
             message.erase(message.length() - 1);
         }
