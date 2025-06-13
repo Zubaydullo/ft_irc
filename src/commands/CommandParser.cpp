@@ -1,18 +1,16 @@
 #include "../../include/Server.hpp"
 
 void Server::parseCommand(int clientFd, const std::string& message){
-    // Validate client exists
     if(!isValidClientFd(clientFd)) {
         std::cerr << "parseCommand: Invalid client FD " << clientFd << std::endl;
         return;
     }
     
-    // Validate message is not empty and not too long
     if(message.empty()) {
-        return;  // Ignore empty messages
+        return;  
     }
     
-    if(message.length() > 512) {  // IRC standard max message length
+    if(message.length() > 512) {  
         std::cerr << "parseCommand: Message too long from client " << clientFd << std::endl;
         sendToClient(clientFd, "ERROR :Message too long");
         return;
@@ -23,14 +21,11 @@ void Server::parseCommand(int clientFd, const std::string& message){
     std::istringstream iss(message);
     std::string command;
     
-    // Safe command extraction
     if(!(iss >> command)) {
-        // Failed to extract command
         return;
     }
     
-    // Validate command is reasonable
-    if(command.length() > 32) {  // No IRC command should be this long
+    if(command.length() > 32) {  
         sendToClient(clientFd, "421 " + _Client[clientFd]->getNickname() + " " + command + " :Unknown command");
         return;
     }
@@ -67,30 +62,25 @@ void Server::parseCommand(int clientFd, const std::string& message){
         removeClient(clientFd);
         return;
     } else if (command == "CAP") {
-        // Handle capability negotiation - common in modern clients
         std::string subcommand;
         iss >> subcommand;
         if (subcommand == "LS") {
             sendToClient(clientFd, ":localhost CAP * LS :");
         } else if (subcommand == "END") {
-            // Client finished capability negotiation
         }
     } else if (command.find("DCC") != std::string::npos) {
         handleDCC(clientFd, iss);
     } else {
-        // Check if client exists before trying to get nickname
         if(_Client.find(clientFd) != _Client.end() && _Client[clientFd]) {
             sendToClient(clientFd, "421 " + _Client[clientFd]->getNickname() + " " + command + " :Unknown command");
         }
         std::cout << "Unknown command: " << command << std::endl;
     }
 
-    // Check if client still exists before registration check
     if(!isValidClientFd(clientFd)) {
-        return;  // Client was removed during command processing
+        return;  
     }
 
-    // Check if client should be registered after processing commands
     if(_Client[clientFd]->isAuthenticated() && 
        !_Client[clientFd]->getNickname().empty() && 
        !_Client[clientFd]->getUsername().empty() && 

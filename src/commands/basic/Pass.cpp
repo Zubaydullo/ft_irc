@@ -11,6 +11,5 @@ void Server::handelPass(int clinetFd ,  std::istringstream& iss) {
     }else{
         sendToClient(clinetFd , "464 " + _Client[clinetFd]->getNickname() + " :Password incorrect");
         std::cout << "Wrong password from clinet  : "  << clinetFd<< std::endl;
-        //TODO: handell the error after 
     }
 }

@@ -10,7 +10,6 @@ void Server::handelUser(int clinetFd , std::istringstream& iss){
         sendToClient(clinetFd , "461 " + _Client[clinetFd]->getNickname() + " :Not enough parameters");
         return;
     }
-    // check if the username is already taken
     for(std::map<int, Client*>::iterator it = _Client.begin() ; it != _Client.end() ; ++it){
         if(it->second->getUsername() == username){
             sendToClient(clinetFd , "433 " + _Client[clinetFd]->getUsername() + " :Username is already taken");

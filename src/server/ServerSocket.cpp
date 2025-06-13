@@ -31,7 +31,7 @@ bool Server::createSocket() {
     struct sockaddr_in serverAddr;
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = INADDR_ANY;  // Listen on all interfaces
+    serverAddr.sin_addr.s_addr = INADDR_ANY;  
     serverAddr.sin_port = htons(_port);
     
     if (bind(_serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
@@ -86,7 +86,7 @@ void Server::acceptNewClient() {
     
     struct pollfd clientPoll;
     clientPoll.fd = clientFd;
-    clientPoll.events = POLLIN; // Initially only listen for incoming data
+    clientPoll.events = POLLIN; 
     clientPoll.revents = 0;
     _pollfd.push_back(clientPoll);
     
