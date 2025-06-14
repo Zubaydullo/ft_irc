@@ -1,7 +1,3 @@
-echo "🧪 TEST 3: Performance Test"
-
-# Create a stress test script
-cat > stress_test.sh << 'EOF'
 #!/bin/bash
 
 echo "Starting stress test..."
@@ -19,6 +15,3 @@ done
 
 wait
 echo "Stress test completed"
-EOF
-
-chmod +x stress_test.sh

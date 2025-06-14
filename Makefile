@@ -27,7 +27,6 @@ SRC = $(SRC_DIR)/main.cpp \
       $(BASIC_CMD_DIR)/Nick.cpp \
       $(BASIC_CMD_DIR)/User.cpp \
       $(BASIC_CMD_DIR)/Pass.cpp \
-      $(BASIC_CMD_DIR)/Quit.cpp \
       $(CHANNEL_CMD_DIR)/Join.cpp \
       $(CHANNEL_CMD_DIR)/Part.cpp \
       $(CHANNEL_CMD_DIR)/Topic.cpp \
