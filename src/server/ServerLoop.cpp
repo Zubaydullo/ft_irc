@@ -18,21 +18,16 @@ void Server::Start() {
     _running = true;
     
     while (_running) {
-        
         int activity = poll(_pollfd.data(), _pollfd.size(), 1000);
         
         if (activity < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            std::cerr << "ERROR: Poll failed: " << strerror(errno) << std::endl;
+            std::cerr << "ERROR: Poll failed" << std::endl;
             break;
         }
         
         if (activity == 0) {
-            continue;
+            continue; 
         }
-        
         
         for (size_t i = 0; i < _pollfd.size(); ++i) {
             if (_pollfd[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
@@ -53,11 +48,56 @@ void Server::Start() {
                     handleClientData(_pollfd[i].fd);
                 }
             }
+            
+            if (_pollfd[i].revents & POLLOUT) {
+                handleClientWriteData(_pollfd[i].fd);
+            }
         }
-        
     }
     
     Stop();
+}
+
+void Server::handleClientWriteData(int clientFd) {
+    if (!isValidClientFd(clientFd)) {
+        return;
+    }
+    
+    std::string& outBuffer = _Client[clientFd]->getOutBuffer();
+    if (outBuffer.empty()) {
+        for (size_t i = 0; i < _pollfd.size(); ++i) {
+            if (_pollfd[i].fd == clientFd) {
+                _pollfd[i].events = POLLIN;
+                break;
+            }
+        }
+        return;
+    }
+    
+    ssize_t bytesSent = send(clientFd, outBuffer.c_str(), outBuffer.length(), MSG_NOSIGNAL);
+    
+    if (bytesSent < 0) {
+        std::cerr << "Send failed for client " << clientFd << std::endl;
+        removeClient(clientFd);
+        return;
+    }
+    
+    if (bytesSent == 0) {
+        std::cerr << "Send returned 0 for client " << clientFd << std::endl;
+        removeClient(clientFd);
+        return;
+    }
+    
+    outBuffer.erase(0, bytesSent);
+    
+    if (outBuffer.empty()) {
+        for (size_t i = 0; i < _pollfd.size(); ++i) {
+            if (_pollfd[i].fd == clientFd) {
+                _pollfd[i].events = POLLIN;
+                break;
+            }
+        }
+    }
 }
 
 void Server::removeClient(int clientFd) {
@@ -98,16 +138,13 @@ void Server::removeClient(int clientFd) {
         }
     }
     
-    std::string disconnectMsg = "ERROR :Disconnected from server";
-    send(clientFd, (disconnectMsg + "\r\n").c_str(), disconnectMsg.length() + 2, MSG_NOSIGNAL);
-    
     delete _Client[clientFd];
     _Client.erase(clientFd);
-    
     close(clientFd);
     
     std::cout << "Successfully removed client " << clientFd << std::endl;
 }
+
 void Server::handleClientData(int clientFd) {
     if (!isValidClientFd(clientFd)) {
         std::cerr << "handleClientData: Invalid client FD " << clientFd << std::endl;
@@ -120,11 +157,7 @@ void Server::handleClientData(int clientFd) {
     ssize_t bytesReceived = recv(clientFd, buffer, sizeof(buffer) - 1, 0);
     
     if (bytesReceived < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            std::cerr << "Warning: recv() returned EAGAIN after poll() indicated ready" << std::endl;
-            return;
-        }
-        std::cerr << "recv() failed for client " << clientFd << ": " << strerror(errno) << std::endl;
+        std::cerr << "recv() failed for client " << clientFd << std::endl;
         removeClient(clientFd);
         return;
     }
@@ -150,7 +183,7 @@ void Server::handleClientData(int clientFd) {
             parseCommand(clientFd, message);
             
             if (!isValidClientFd(clientFd)) {
-                return;
+                return; 
             }
         }
     }
@@ -168,7 +201,7 @@ void Server::handleClientData(int clientFd) {
             parseCommand(clientFd, message);
             
             if (!isValidClientFd(clientFd)) {
-                return;
+                return; 
             }
         }
     }

@@ -19,6 +19,8 @@ class Channel {
         bool _inviteOnly;
         bool  _topicRestricted;
         int _userLimit;
+        Channel(const Channel& other);
+        Channel& operator=(const Channel& other);
      public:
         Channel(const std::string& name);
         ~Channel();

@@ -81,19 +81,6 @@ void Server::parseCommand(int clientFd, const std::string& message){
         return;  
     }
 
-    if(_Client[clientFd]->isAuthenticated() && 
-       !_Client[clientFd]->getNickname().empty() && 
-       !_Client[clientFd]->getUsername().empty() && 
-       !_Client[clientFd]->isRegistered()) {
-        
-        _Client[clientFd]->setRegistered(true);
-        std::string nick = _Client[clientFd]->getNickname();
-        sendToClient(clientFd, ":localhost 001 " + nick + " :Welcome to the IRC Server!");
-        sendToClient(clientFd, ":localhost 002 " + nick + " :Your host is localhost");
-        sendToClient(clientFd, ":localhost 003 " + nick + " :Server created recently");
-        sendToClient(clientFd, ":localhost 004 " + nick + " localhost v1.0 o o");
-        std::cout << "Client " << clientFd << " (" << nick << ") is now fully registered" << std::endl;
-    }
 }
 
 int Server::findClientByNick(const std::string& nickname) {
@@ -105,44 +92,23 @@ int Server::findClientByNick(const std::string& nickname) {
     return -1;
 }
 
-
-void Server::sendToClient(int clientFd, const std::string& message) {
+void Server::sendToClientRaw(int clientFd, const std::string& rawMessage) {
     if (!isValidClientFd(clientFd)) {
         std::cerr << "Warning: Attempted to send to invalid client " << clientFd << std::endl;
         return;
     }
     
-    std::string fullMessage = message + "\r\n";
+    // Raw message already formatted - just add final \r\n
+    std::string fullMessage = rawMessage + "\r\n";
     
-    struct pollfd pfd;
-    pfd.fd = clientFd;
-    pfd.events = POLLOUT;
-    pfd.revents = 0;
-    
-    int pollResult = poll(&pfd, 1, 0); 
-    
-    if (pollResult < 0) {
-        std::cerr << "Poll failed for client " << clientFd << ": " << strerror(errno) << std::endl;
-        removeClient(clientFd);
-        return;
-    }
-    
-    if (pollResult == 0 || !(pfd.revents & POLLOUT)) {
-        _Client[clientFd]->addToOutBuffer(fullMessage);
-        std::cout << "Buffered message for client " << clientFd << ": " << message << std::endl;
-        return;
-    }
-    
-    ssize_t bytesSent = send(clientFd, fullMessage.c_str(), fullMessage.length(), MSG_NOSIGNAL);
+    // Try to send immediately
+    ssize_t bytesSent = send(clientFd, fullMessage.c_str(), fullMessage.length(), MSG_NOSIGNAL | MSG_DONTWAIT);
     
     if (bytesSent < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            _Client[clientFd]->addToOutBuffer(fullMessage);
-            std::cout << "Send would block for client " << clientFd << ", buffered message" << std::endl;
-            return;
-        }
-        std::cerr << "Send failed for client " << clientFd << ": " << strerror(errno) << std::endl;
-        removeClient(clientFd);
+        // Would block or error - add to buffer and enable POLLOUT
+        _Client[clientFd]->addToOutBuffer(fullMessage);
+        enablePollOut(clientFd);
+        std::cout << "Buffered raw message for client " << clientFd << std::endl;
         return;
     }
     
@@ -155,8 +121,51 @@ void Server::sendToClient(int clientFd, const std::string& message) {
     if ((size_t)bytesSent < fullMessage.length()) {
         std::string remaining = fullMessage.substr(bytesSent);
         _Client[clientFd]->addToOutBuffer(remaining);
+        enablePollOut(clientFd);
+        std::cout << "Partial send to client " << clientFd << ", buffered remaining " << remaining.length() << " bytes" << std::endl;
+    }
+    
+    std::cout << "Sent raw message to Client " << clientFd << std::endl;
+}
+
+void Server::sendToClient(int clientFd, const std::string& message) {
+    if (!isValidClientFd(clientFd)) {
+        std::cerr << "Warning: Attempted to send to invalid client " << clientFd << std::endl;
+        return;
+    }
+    
+    std::string fullMessage = message + "\r\n";
+    
+    ssize_t bytesSent = send(clientFd, fullMessage.c_str(), fullMessage.length(), MSG_NOSIGNAL | MSG_DONTWAIT);
+    
+    if (bytesSent < 0) {
+        _Client[clientFd]->addToOutBuffer(fullMessage);
+        enablePollOut(clientFd);
+        std::cout << "Buffered message for client " << clientFd << ": " << message << std::endl;
+        return;
+    }
+    
+    if (bytesSent == 0) {
+        std::cerr << "Send returned 0 for client " << clientFd << std::endl;
+        removeClient(clientFd);
+        return;
+    }
+    
+    if ((size_t)bytesSent < fullMessage.length()) {
+        std::string remaining = fullMessage.substr(bytesSent);
+        _Client[clientFd]->addToOutBuffer(remaining);
+        enablePollOut(clientFd);
         std::cout << "Partial send to client " << clientFd << ", buffered remaining " << remaining.length() << " bytes" << std::endl;
     }
     
     std::cout << "Sent to Client " << clientFd << ": " << message << std::endl;
+}
+
+void Server::enablePollOut(int clientFd) {
+    for (size_t i = 0; i < _pollfd.size(); ++i) {
+        if (_pollfd[i].fd == clientFd) {
+            _pollfd[i].events |= POLLOUT; 
+            break;
+        }
+    }
 }

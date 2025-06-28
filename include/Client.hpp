@@ -31,7 +31,8 @@ private:
     bool createSocket();
     bool connectToServer();
     void parseMessage(const std::string& message);
-
+    Client(const Client& other);
+    Client& operator=(const Client& other);
 public:
     // Constructors & Destructor
     Client(int fd);  // Constructor for server-side client

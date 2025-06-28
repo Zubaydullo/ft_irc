@@ -34,11 +34,12 @@ class Server {
             bool _running;
             std::map<std::string, std::vector<int> > _inviteList; 
             std::map<std::string , Channel*> _channels;
+        Server(const Server& other);
+        Server& operator=(const Server& other);        
         public: 
             Server(int Port , std::string& Password);      
             ~Server();
 
-        //NOTE: i need to check if i need to implement the orthodox
            void Start();
            void Stop();
         private:
@@ -54,6 +55,9 @@ class Server {
            void handleMode(int clientFd , std::istringstream& iss);
            void handleNames(int clientFd , std::istringstream& iss);
            void handleDCC(int clientFd, std::istringstream& iss);
+           void handleClientWriteData(int clientFd); 
+           void enablePollOut(int clientFd);
+           void sendToClientRaw(int clientFd, const std::string& rawMessage); 
            //Here handel the existing Users 
 
            // Handel the  Users && Operators 
