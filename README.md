@@ -598,11 +598,6 @@ valgrind --leak-check=full ./ircserv 6667 testpass
 - ✅ **Signal Handling**: Graceful shutdown capabilities
 - ✅ **Extended Commands**: Additional IRC command support
 
-### 🔮 Future Improvements
-- Channel history persistence
-- SSL/TLS encryption support
-- Advanced bot AI capabilities
-- Web interface for server management
 - Performance monitoring and metrics
 
 ---
